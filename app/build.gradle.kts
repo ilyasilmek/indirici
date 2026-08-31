@@ -73,6 +73,13 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
+  // Play Services transitively pulls in androidx.fragment:1.1.0, which predates the
+  // fix for ActivityResult APIs (registerForActivityResult in MainActivity) not
+  // calling super.onRequestPermissionsResult() and using invalid request codes.
+  // Nothing here uses Fragment directly, so force resolution to a safe version.
+  constraints {
+    implementation(libs.androidx.fragment)
+  }
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
