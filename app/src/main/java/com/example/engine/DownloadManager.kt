@@ -245,7 +245,9 @@ class DownloadManager(
 
         // Check network constraints
         if (settings.wifiOnly && !isWifiConnected()) {
-            repository.markFailed(downloadId, "Yalnızca Wi-Fi modunda: Wi-Fi bağlantısı bekleniyor")
+            val reason = "Yalnızca Wi-Fi modunda: Wi-Fi bağlantısı bekleniyor"
+            repository.markFailed(downloadId, reason)
+            NotificationHelper.showDownloadFailedNotification(context, item.copy(status = DownloadStatus.FAILED), reason)
             return
         }
 
@@ -302,14 +304,18 @@ class DownloadManager(
                     executeDownloadInternal(downloadId)
                     return
                 } else {
-                    repository.markFailed(downloadId, "HTTP Hatası: ${response.code} ${response.message}")
+                    val reason = "HTTP Hatası: ${response.code} ${response.message}"
+                    repository.markFailed(downloadId, reason)
+                    NotificationHelper.showDownloadFailedNotification(context, item.copy(status = DownloadStatus.FAILED), reason)
                     return
                 }
             }
 
             val body = response.body
             if (body == null) {
-                repository.markFailed(downloadId, "Sunucu boş yanıt döndürdü")
+                val reason = "Sunucu boş yanıt döndürdü"
+                repository.markFailed(downloadId, reason)
+                NotificationHelper.showDownloadFailedNotification(context, item.copy(status = DownloadStatus.FAILED), reason)
                 return
             }
 
@@ -393,7 +399,9 @@ class DownloadManager(
                 if (targetFile.exists()) targetFile.delete()
                 val moved = tempFile.renameTo(targetFile)
                 if (!moved) {
-                    repository.markFailed(downloadId, "Dosya taşınamadı: hedef konuma yazılamadı")
+                    val reason = "Dosya taşınamadı: hedef konuma yazılamadı"
+                    repository.markFailed(downloadId, reason)
+                    NotificationHelper.showDownloadFailedNotification(context, item.copy(status = DownloadStatus.FAILED), reason)
                     return
                 }
 

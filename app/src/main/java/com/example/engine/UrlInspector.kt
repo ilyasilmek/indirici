@@ -32,12 +32,17 @@ object UrlInspector {
     // High-Speed & Test Presets for instant user testing
     val PRESET_MEDIA_ITEMS = listOf(
         MediaInspectResult(
+            // The classic commondatastorage.googleapis.com/gtv-videos-bucket demo
+            // files Google published for years now return 403 (bucket access was
+            // revoked) - confirmed directly, not just in this app. Replaced with
+            // Google's own ExoPlayer team test-media bucket, which is still public
+            // and actively used by their demo app.
             title = "Big Buck Bunny - Open Source HD Animation (1080p)",
-            originalUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            originalUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4",
             hostPlatform = "Blender Open Media",
             fileType = FileType.VIDEO,
-            totalSizeText = "158.0 MB",
-            totalSizeBytes = 165747424L,
+            totalSizeText = "61.7 MB",
+            totalSizeBytes = 64657027L,
             mimeType = "video/mp4",
             supportsMultiThread = true,
             author = "Blender Foundation",
@@ -49,18 +54,18 @@ object UrlInspector {
                     title = "Full HD (1080p Video)",
                     resolution = "1920x1080",
                     format = "MP4 (H.264)",
-                    estimatedSize = "158.0 MB",
-                    estimatedBytes = 165747424L,
-                    directDownloadUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                    estimatedSize = "61.7 MB",
+                    estimatedBytes = 64657027L,
+                    directDownloadUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4"
                 ),
                 MediaQualityOption(
                     id = "720p",
                     title = "HD (720p Video)",
                     resolution = "1280x720",
                     format = "MP4 (H.264)",
-                    estimatedSize = "92.4 MB",
-                    estimatedBytes = 96888422L,
-                    directDownloadUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                    estimatedSize = "61.7 MB",
+                    estimatedBytes = 64657027L,
+                    directDownloadUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4"
                 ),
                 MediaQualityOption(
                     id = "audio_mp3",
@@ -95,7 +100,12 @@ object UrlInspector {
                     format = "ZIP / Bundle",
                     estimatedSize = "142.5 MB",
                     estimatedBytes = 149422080L,
-                    directDownloadUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+                    // Synthetic payload from Cloudflare's own speed-test endpoint - a
+                    // real, stable, publicly documented service that serves back
+                    // exactly the requested byte count, which fits a "bundle" blob
+                    // (declared format is ZIP, not a playable video) far better than
+                    // relying on another third-party file host staying alive.
+                    directDownloadUrl = "https://speed.cloudflare.com/__down?bytes=149422080"
                 ),
                 MediaQualityOption(
                     id = "course_pdf_only",
@@ -107,11 +117,14 @@ object UrlInspector {
                     directDownloadUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
                 )
             ),
+            // Real, currently-live sample videos from Google's ExoPlayer test-media
+            // bucket (confirmed reachable), sized to their actual content-length so
+            // the displayed size matches what actually downloads.
             courseLessons = listOf(
-                CourseLessonItem(1, "01. Introduction to Mobile Architecture", "14:20", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", "24.5 MB", 25690112L),
-                CourseLessonItem(2, "02. High Performance Network Streams", "22:15", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", "38.2 MB", 40055603L),
-                CourseLessonItem(3, "03. Jetpack Compose UI Craftsmanship", "30:40", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4", "52.8 MB", 55364812L),
-                CourseLessonItem(4, "04. Offline First Database Architecture", "18:50", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4", "27.0 MB", 28311553L)
+                CourseLessonItem(1, "01. Introduction to Mobile Architecture", "14:20", "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4", "61.7 MB", 64657027L),
+                CourseLessonItem(2, "02. High Performance Network Streams", "22:15", "https://storage.googleapis.com/exoplayer-test-media-1/mp4/dizzy-with-tx3g.mp4", "1.5 MB", 1609079L),
+                CourseLessonItem(3, "03. Jetpack Compose UI Craftsmanship", "30:40", "https://storage.googleapis.com/exoplayer-test-media-1/mp4/android-screens-10s.mp4", "1.8 MB", 1854368L),
+                CourseLessonItem(4, "04. Offline First Database Architecture", "18:50", "https://storage.googleapis.com/exoplayer-test-media-1/mp4/dizzy-with-tx3g.mp4", "1.5 MB", 1609079L)
             )
         ),
         MediaInspectResult(
@@ -150,8 +163,12 @@ object UrlInspector {
             )
         ),
         MediaInspectResult(
+            // speed.hetzner.de/100MB.bin no longer resolves (confirmed directly).
+            // Cloudflare's own speed-test endpoint is the more fitting and durable
+            // replacement anyway: it's built exactly for this purpose and serves
+            // back precisely the byte count requested via ?bytes=.
             title = "Network Turbo Speed Benchmark (50 MB Test File)",
-            originalUrl = "https://speed.hetzner.de/100MB.bin",
+            originalUrl = "https://speed.cloudflare.com/__down?bytes=52428800",
             hostPlatform = "High-Speed CDN Mirror",
             fileType = FileType.ARCHIVE,
             totalSizeText = "50.0 MB",
@@ -169,7 +186,7 @@ object UrlInspector {
                     format = "BIN / ZIP",
                     estimatedSize = "50.0 MB",
                     estimatedBytes = 52428800L,
-                    directDownloadUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+                    directDownloadUrl = "https://speed.cloudflare.com/__down?bytes=52428800"
                 ),
                 MediaQualityOption(
                     id = "bench_10mb",
@@ -178,7 +195,7 @@ object UrlInspector {
                     format = "BIN",
                     estimatedSize = "10.0 MB",
                     estimatedBytes = 10485760L,
-                    directDownloadUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4"
+                    directDownloadUrl = "https://speed.cloudflare.com/__down?bytes=10485760"
                 )
             )
         )
