@@ -6,10 +6,8 @@ import com.example.data.model.MediaQualityOption
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -57,11 +55,7 @@ object YouTubeExtractor {
         val invidiousResult = extractFromInvidious(videoId, cleanUrl, httpClient)
         if (invidiousResult != null) return@withContext invidiousResult
 
-        // Strategy 3: Cobalt Instances
-        val cobaltResult = extractFromCobalt(cleanUrl, videoId, httpClient)
-        if (cobaltResult != null) return@withContext cobaltResult
-
-        // Strategy 4: oEmbed fallback
+        // Strategy 3: oEmbed fallback
         val oembedResult = extractFromOembed(cleanUrl, videoId, httpClient)
         if (oembedResult != null) return@withContext oembedResult
 
@@ -285,88 +279,6 @@ object YouTubeExtractor {
                 }
             } catch (e: Exception) {
                 // continue to next invidious
-            }
-        }
-        return null
-    }
-
-    private fun extractFromCobalt(
-        cleanUrl: String,
-        videoId: String,
-        httpClient: OkHttpClient
-    ): MediaInspectResult? {
-        val cobaltInstances = listOf(
-            "https://cobalt-api.kwiatekm.tokyo/",
-            "https://api.wuk.sh/api/json",
-            "https://cobalt.xy2401.com/api/json",
-            "https://api.cobalt.tools/api/json"
-        )
-
-        for (instance in cobaltInstances) {
-            try {
-                val jsonPayload = JSONObject().apply {
-                    put("url", cleanUrl)
-                    put("videoQuality", "1080")
-                }.toString()
-
-                val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
-                val request = Request.Builder()
-                    .url(instance)
-                    .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
-                    .header("User-Agent", "OmniGet-Downloader/2.0")
-                    .post(body)
-                    .build()
-
-                httpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val responseBody = response.body?.string() ?: return@use
-                        val json = JSONObject(responseBody)
-                        val streamUrl = json.optString("url")
-                        val filename = json.optString("filename", "YouTube_Video_$videoId.mp4")
-
-                        if (streamUrl.isNotBlank() && streamUrl.startsWith("http")) {
-                            val qualities = listOf(
-                                MediaQualityOption(
-                                    id = "yt_cobalt_1080",
-                                    title = "Full HD Video (1080p MP4)",
-                                    resolution = "1080p Full HD",
-                                    format = "MP4 Video",
-                                    estimatedSize = "65.0 MB",
-                                    estimatedBytes = 68_157_440L,
-                                    directDownloadUrl = streamUrl
-                                ),
-                                MediaQualityOption(
-                                    id = "yt_cobalt_audio",
-                                    title = "Sadece Ses (MP3 320kbps)",
-                                    resolution = "Stereo Audio",
-                                    format = "MP3 Audio",
-                                    estimatedSize = "8.5 MB",
-                                    estimatedBytes = 8_912_896L,
-                                    isAudioOnly = true,
-                                    directDownloadUrl = streamUrl
-                                )
-                            )
-
-                            return MediaInspectResult(
-                                title = filename,
-                                originalUrl = cleanUrl,
-                                hostPlatform = "YouTube Video",
-                                fileType = FileType.VIDEO,
-                                totalSizeText = "65.0 MB",
-                                totalSizeBytes = 68_157_440L,
-                                mimeType = "video/mp4",
-                                supportsMultiThread = true,
-                                qualityOptions = qualities,
-                                author = "YouTube",
-                                durationText = "HD Video",
-                                thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                // try next
             }
         }
         return null

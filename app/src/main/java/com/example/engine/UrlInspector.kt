@@ -4,7 +4,6 @@ import com.example.data.model.CourseLessonItem
 import com.example.data.model.FileType
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
-import com.example.engine.extractors.CobaltExtractor
 import com.example.engine.extractors.InstagramExtractor
 import com.example.engine.extractors.TelegramExtractor
 import com.example.engine.extractors.TikTokExtractor
@@ -194,6 +193,16 @@ object UrlInspector {
             return@withContext matchingPreset
         }
 
+        // A URL recognized as belonging to one of these platforms must never fall
+        // through to inspectDirectHttp below: that treats whatever the URL returns
+        // (typically the platform's own HTML page) as if it were the downloadable
+        // file itself, silently "downloading" garbage instead of failing loudly.
+        val isKnownSocialPlatform = InstagramExtractor.matches(cleanUrl) ||
+            YouTubeExtractor.matches(cleanUrl) ||
+            TelegramExtractor.matches(cleanUrl) ||
+            TikTokExtractor.matches(cleanUrl) ||
+            TwitterExtractor.matches(cleanUrl)
+
         // 2. Instagram Extractor
         if (InstagramExtractor.matches(cleanUrl)) {
             val igResult = InstagramExtractor.extract(cleanUrl, httpClient)
@@ -224,13 +233,13 @@ object UrlInspector {
             if (twResult != null) return@withContext twResult
         }
 
-        // 7. Universal Cobalt Fallback for Social Media (Reddit, Pinterest, SoundCloud, etc.)
-        val cobaltResult = CobaltExtractor.extract(cleanUrl, httpClient)
-        if (cobaltResult != null) {
-            return@withContext cobaltResult
+        if (isKnownSocialPlatform) {
+            throw IllegalStateException(
+                "Bu bağlantıdan medya bilgisi alınamadı. İçeriğin herkese açık ve geçerli olduğundan emin olun ya da daha sonra tekrar deneyin."
+            )
         }
 
-        // 8. Direct HTTP Probe for files / direct links / web downloads
+        // 7. Direct HTTP Probe for files / direct links / web downloads
         return@withContext inspectDirectHttp(cleanUrl)
     }
 

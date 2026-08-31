@@ -6,10 +6,9 @@ import com.example.data.model.MediaQualityOption
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -51,7 +50,7 @@ object InstagramExtractor {
         val shortcode = extractShortcode(url) ?: return@withContext null
         val cleanUrl = "https://www.instagram.com/reel/$shortcode/"
 
-        // Strategy 1: ddinstagram / vxinstagram OpenGraph & JSON
+        // Strategy 1: embed-proxy mirror OpenGraph & JSON
         val ogResult = extractFromVxInstagram(shortcode, cleanUrl, httpClient)
         if (ogResult != null) return@withContext ogResult
 
@@ -59,11 +58,7 @@ object InstagramExtractor {
         val embedResult = extractFromInstagramEmbed(shortcode, cleanUrl, httpClient)
         if (embedResult != null) return@withContext embedResult
 
-        // Strategy 3: Cobalt Instances
-        val cobaltResult = extractFromCobalt(cleanUrl, httpClient)
-        if (cobaltResult != null) return@withContext cobaltResult
-
-        // Strategy 4: Direct oEmbed metadata fallback
+        // Strategy 3: Direct oEmbed metadata fallback
         val oembedResult = extractFromOembed(cleanUrl, httpClient)
         if (oembedResult != null) return@withContext oembedResult
 
@@ -75,11 +70,14 @@ object InstagramExtractor {
         originalUrl: String,
         httpClient: OkHttpClient
     ): MediaInspectResult? {
+        // ddinstagram.com/vxinstagram.com (the InstaFix project) was archived and is no
+        // longer reachable; uuinstagram.com is a currently-live fork of the same proxy.
         val endpoints = listOf(
-            "https://api.ddinstagram.com/videos/$shortcode",
+            "https://uuinstagram.com/reel/$shortcode",
+            "https://uuinstagram.com/p/$shortcode",
+            "https://eeinstagram.com/reel/$shortcode",
             "https://ddinstagram.com/reel/$shortcode",
-            "https://vxinstagram.com/reel/$shortcode",
-            "https://ddinstagram.com/p/$shortcode"
+            "https://vxinstagram.com/reel/$shortcode"
         )
 
         for (endpoint in endpoints) {
@@ -132,24 +130,33 @@ object InstagramExtractor {
 
                     val videoMatch = videoUrlRegex.find(body) ?: altVideoRegex.find(body)
                     if (videoMatch != null) {
-                        var videoUrl = videoMatch.groupValues[1]
-                        videoUrl = decodeHtml(videoUrl)
+                        var videoUrl = decodeHtml(videoMatch.groupValues[1])
+                        // Some mirrors return a path relative to their own origin
+                        // (e.g. "/videos/<shortcode>/1") instead of an absolute URL.
+                        if (!videoUrl.startsWith("http")) {
+                            videoUrl = endpoint.toHttpUrlOrNull()?.resolve(videoUrl)?.toString() ?: ""
+                        }
 
-                        val titleRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:title|twitter:title)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                        val descRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:description|description)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                        val imgRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:image|twitter:image)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                        if (videoUrl.startsWith("http")) {
+                            val titleRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:title|twitter:title)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                            val descRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:description|description)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                            val imgRegex = Regex("""<meta\s+(?:property|name)=["'](?:og:image|twitter:image)["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
-                        val title = decodeHtml(titleRegex.find(body)?.groupValues?.getOrNull(1) ?: descRegex.find(body)?.groupValues?.getOrNull(1) ?: "Instagram Reel ($shortcode)").take(60)
-                        val img = decodeHtml(imgRegex.find(body)?.groupValues?.getOrNull(1) ?: "")
+                            val title = decodeHtml(titleRegex.find(body)?.groupValues?.getOrNull(1) ?: descRegex.find(body)?.groupValues?.getOrNull(1) ?: "Instagram Reel ($shortcode)").take(60)
+                            var img = decodeHtml(imgRegex.find(body)?.groupValues?.getOrNull(1) ?: "")
+                            if (img.isNotBlank() && !img.startsWith("http")) {
+                                img = endpoint.toHttpUrlOrNull()?.resolve(img)?.toString() ?: ""
+                            }
 
-                        return buildInstagramResult(
-                            shortcode = shortcode,
-                            originalUrl = originalUrl,
-                            directVideoUrl = videoUrl,
-                            title = title,
-                            thumbnailUrl = img.ifBlank { null },
-                            author = "Instagram"
-                        )
+                            return buildInstagramResult(
+                                shortcode = shortcode,
+                                originalUrl = originalUrl,
+                                directVideoUrl = videoUrl,
+                                title = title,
+                                thumbnailUrl = img.ifBlank { null },
+                                author = "Instagram"
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -218,69 +225,6 @@ object InstagramExtractor {
             }
         } catch (e: Exception) {
             // embed parsing failed
-        }
-        return null
-    }
-
-    private fun extractFromCobalt(
-        cleanUrl: String,
-        httpClient: OkHttpClient
-    ): MediaInspectResult? {
-        val cobaltInstances = listOf(
-            "https://cobalt-api.kwiatekm.tokyo/",
-            "https://api.wuk.sh/api/json",
-            "https://cobalt.xy2401.com/api/json",
-            "https://api.cobalt.tools/api/json"
-        )
-
-        for (instance in cobaltInstances) {
-            try {
-                val jsonPayload = JSONObject().apply {
-                    put("url", cleanUrl)
-                    put("videoQuality", "1080")
-                    put("filenamePattern", "basic")
-                }.toString()
-
-                val body = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
-                val request = Request.Builder()
-                    .url(instance)
-                    .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
-                    .header("User-Agent", "OmniGet-Downloader/2.0")
-                    .post(body)
-                    .build()
-
-                httpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val responseBody = response.body?.string() ?: return@use
-                        val json = JSONObject(responseBody)
-                        val status = json.optString("status")
-
-                        val streamUrl = when (status) {
-                            "stream", "redirect", "tunnel" -> json.optString("url")
-                            "picker" -> {
-                                val picker = json.optJSONArray("picker")
-                                picker?.optJSONObject(0)?.optString("url") ?: ""
-                            }
-                            else -> json.optString("url")
-                        }
-
-                        if (streamUrl.isNotBlank() && streamUrl.startsWith("http")) {
-                            val shortcode = extractShortcode(cleanUrl) ?: "Reel"
-                            return buildInstagramResult(
-                                shortcode = shortcode,
-                                originalUrl = cleanUrl,
-                                directVideoUrl = streamUrl,
-                                title = "Instagram Reel ($shortcode)",
-                                thumbnailUrl = null,
-                                author = "Instagram"
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                // try next cobalt instance
-            }
         }
         return null
     }
