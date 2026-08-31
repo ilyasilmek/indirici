@@ -38,19 +38,27 @@ object TelegramExtractor {
                 if (!response.isSuccessful) return@withContext null
                 val body = response.body?.string() ?: return@withContext null
 
-                // Extract video stream URL
+                // Extract video stream URL. A post without an inline <video> often still
+                // exposes telesco.pe file links for its JPEG preview thumbnails - those
+                // must never be accepted here, so every fallback below requires an
+                // explicit video extension rather than matching any telesco.pe link.
                 val videoSrcRegex = Regex("""<video[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                val docHrefRegex = Regex("""<a[^>]+class=["'][^"']*tgme_widget_message_document_wrap[^"']*["'][^>]+href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                val rawVideoRegex = Regex("""(https://cdn\d*\.telesco\.pe/file/[a-zA-Z0-9_-]+|https://[a-zA-Z0-9.-]+\.telegram\.org/[^"']+)""")
+                val videoExt = """(?:mp4|mov|mkv|webm|m4v)"""
+                val docHrefRegex = Regex("""<a[^>]+class=["'][^"']*tgme_widget_message_document_wrap[^"']*["'][^>]+href=["']([^"']+\.$videoExt(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE)
+                val rawVideoRegex = Regex("""(https://cdn\d*\.telesco\.pe/file/[a-zA-Z0-9_-]+\.$videoExt(?:\?[^"'\s]*)?|https://[a-zA-Z0-9.-]+\.telegram\.org/[^"'\s]+\.$videoExt(?:\?[^"'\s]*)?)""", RegexOption.IGNORE_CASE)
 
                 val videoUrlMatch = videoSrcRegex.find(body) ?: docHrefRegex.find(body) ?: rawVideoRegex.find(body)
                 val directVideoUrl = videoUrlMatch?.groupValues?.getOrNull(1) ?: videoUrlMatch?.groupValues?.getOrNull(0)
+                    // No genuine video found (e.g. a text/photo-only post) - fail
+                    // honestly instead of "downloading" the Telegram post page itself.
+                    ?: return@withContext null
 
                 // Extract thumbnail
                 val posterRegex = Regex("""<video[^>]+poster=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
                 val bgThumbRegex = Regex("""background-image:\s*url\(['"]?([^'"]+)['"]?\)""", RegexOption.IGNORE_CASE)
-                val thumbUrl = posterRegex.find(body)?.groupValues?.getOrNull(1)
-                    ?: bgThumbRegex.find(body)?.groupValues?.getOrNull(1)
+                val thumbUrl = (posterRegex.find(body)?.groupValues?.getOrNull(1)
+                    ?: bgThumbRegex.find(body)?.groupValues?.getOrNull(1))
+                    ?.let { if (it.startsWith("//")) "https:$it" else it }
 
                 // Extract channel & title
                 val channelNameRegex = Regex("""<div class=["']tgme_widget_message_owner_name["']>[\s\S]*?<span dir=["']auto["']>([^<]+)</span>""", RegexOption.IGNORE_CASE)
@@ -64,7 +72,7 @@ object TelegramExtractor {
                 val safeTitle = displayTitle.replace(Regex("""[\\/:*?"<>|\r\n\t]"""), " ").trim()
                 val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
 
-                val finalStreamUrl = directVideoUrl ?: cleanUrl
+                val finalStreamUrl = directVideoUrl
 
                 val qualities = listOf(
                     MediaQualityOption(

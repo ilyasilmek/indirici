@@ -11,7 +11,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLDecoder
-import java.net.URLEncoder
 
 object InstagramExtractor {
 
@@ -57,10 +56,6 @@ object InstagramExtractor {
         // Strategy 2: Instagram Embed HTML
         val embedResult = extractFromInstagramEmbed(shortcode, cleanUrl, httpClient)
         if (embedResult != null) return@withContext embedResult
-
-        // Strategy 3: Direct oEmbed metadata fallback
-        val oembedResult = extractFromOembed(cleanUrl, httpClient)
-        if (oembedResult != null) return@withContext oembedResult
 
         return@withContext null
     }
@@ -225,42 +220,6 @@ object InstagramExtractor {
             }
         } catch (e: Exception) {
             // embed parsing failed
-        }
-        return null
-    }
-
-    private fun extractFromOembed(
-        cleanUrl: String,
-        httpClient: OkHttpClient
-    ): MediaInspectResult? {
-        try {
-            val oembedUrl = "https://api.instagram.com/oembed/?url=${URLEncoder.encode(cleanUrl, "UTF-8")}&omitscript=true"
-            val request = Request.Builder()
-                .url(oembedUrl)
-                .header("User-Agent", BROWSER_USER_AGENT)
-                .build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return null
-                    val json = JSONObject(body)
-                    val title = json.optString("title").ifBlank { "Instagram Media" }.take(60)
-                    val author = json.optString("author_name").ifBlank { "Instagram" }
-                    val thumbnail = json.optString("thumbnail_url")
-                    val shortcode = extractShortcode(cleanUrl) ?: "Reel"
-
-                    return buildInstagramResult(
-                        shortcode = shortcode,
-                        originalUrl = cleanUrl,
-                        directVideoUrl = cleanUrl,
-                        title = "$title ($shortcode)",
-                        thumbnailUrl = thumbnail.ifBlank { null },
-                        author = author
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            // oembed failed
         }
         return null
     }

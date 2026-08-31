@@ -10,7 +10,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLEncoder
 
 object YouTubeExtractor {
 
@@ -47,17 +46,16 @@ object YouTubeExtractor {
         val videoId = extractVideoId(url) ?: return@withContext null
         val cleanUrl = "https://www.youtube.com/watch?v=$videoId"
 
-        // Strategy 1: Piped API
+        // Strategy 1: Piped API. This is the only remaining viable strategy: YouTube
+        // now actively blocks anonymous/server-side stream requests ("Sign in to
+        // confirm that you're not a bot"), which is why every public Invidious
+        // instance has disabled its API entirely and most Piped instances fail the
+        // same way - Piped only succeeds when an instance has a working bypass or,
+        // for some archived videos, a non-YouTube mirror. There is no reliable free
+        // way around this; when it fails, the caller must surface a clear error
+        // rather than fabricate a fake result.
         val pipedResult = extractFromPiped(videoId, cleanUrl, httpClient)
         if (pipedResult != null) return@withContext pipedResult
-
-        // Strategy 2: Invidious API
-        val invidiousResult = extractFromInvidious(videoId, cleanUrl, httpClient)
-        if (invidiousResult != null) return@withContext invidiousResult
-
-        // Strategy 3: oEmbed fallback
-        val oembedResult = extractFromOembed(cleanUrl, videoId, httpClient)
-        if (oembedResult != null) return@withContext oembedResult
 
         return@withContext null
     }
@@ -67,11 +65,15 @@ object YouTubeExtractor {
         cleanUrl: String,
         httpClient: OkHttpClient
     ): MediaInspectResult? {
+        // api.piped.private.coffee is the only instance confirmed live as of this
+        // writing; the others are kept as opportunistic fallbacks since public
+        // instance uptime here is highly volatile (see docs.piped.video for the
+        // current official list).
         val pipedInstances = listOf(
-            "https://pipedapi.kavin.rocks",
             "https://api.piped.private.coffee",
-            "https://pipedapi.tokhmi.xyz",
-            "https://piped-api.lunar.icu"
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.adminforge.de",
+            "https://pipedapi.drgns.space"
         )
 
         for (instance in pipedInstances) {
@@ -172,181 +174,6 @@ object YouTubeExtractor {
             } catch (e: Exception) {
                 // try next instance
             }
-        }
-        return null
-    }
-
-    private fun extractFromInvidious(
-        videoId: String,
-        cleanUrl: String,
-        httpClient: OkHttpClient
-    ): MediaInspectResult? {
-        val invidiousInstances = listOf(
-            "https://inv.nadeko.net",
-            "https://invidious.nerdvpn.de",
-            "https://invidious.jing.rocks",
-            "https://yt.drgnz.club"
-        )
-
-        for (instance in invidiousInstances) {
-            try {
-                val request = Request.Builder()
-                    .url("$instance/api/v1/videos/$videoId")
-                    .header("User-Agent", BROWSER_USER_AGENT)
-                    .build()
-
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val body = response.body?.string() ?: return@use
-                    val json = JSONObject(body)
-
-                    val title = json.optString("title", "YouTube Video")
-                    val author = json.optString("author", "YouTube Channel")
-                    val durationSec = json.optLong("lengthSeconds", 0L)
-                    val durationFormatted = if (durationSec > 0) formatSeconds(durationSec) else "HD Video"
-                    val thumb = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-
-                    val formatStreams = json.optJSONArray("formatStreams") ?: JSONArray()
-                    val adaptiveFormats = json.optJSONArray("adaptiveFormats") ?: JSONArray()
-
-                    val qualities = mutableListOf<MediaQualityOption>()
-
-                    for (i in 0 until formatStreams.length()) {
-                        val stream = formatStreams.optJSONObject(i) ?: continue
-                        val streamUrl = stream.optString("url")
-                        val resolution = stream.optString("resolution", "720p")
-                        val container = stream.optString("container", "mp4").uppercase()
-                        val size = stream.optString("size", "45 MB")
-
-                        if (streamUrl.isNotBlank() && streamUrl.startsWith("http")) {
-                            qualities.add(
-                                MediaQualityOption(
-                                    id = "inv_stream_$i",
-                                    title = "Video ($resolution - $container)",
-                                    resolution = resolution,
-                                    format = "$container Video",
-                                    estimatedSize = size,
-                                    estimatedBytes = 45_000_000L,
-                                    directDownloadUrl = streamUrl
-                                )
-                            )
-                        }
-                    }
-
-                    // Check for audio stream in adaptiveFormats
-                    for (i in 0 until adaptiveFormats.length()) {
-                        val stream = adaptiveFormats.optJSONObject(i) ?: continue
-                        val type = stream.optString("type")
-                        if (type.startsWith("audio/")) {
-                            val audioUrl = stream.optString("url")
-                            if (audioUrl.isNotBlank()) {
-                                qualities.add(
-                                    MediaQualityOption(
-                                        id = "inv_audio_hq",
-                                        title = "Sadece Ses (MP3 320kbps)",
-                                        resolution = "Stereo Audio",
-                                        format = "MP3 / Audio",
-                                        estimatedSize = "9.2 MB",
-                                        estimatedBytes = 9_646_899L,
-                                        isAudioOnly = true,
-                                        directDownloadUrl = audioUrl
-                                    )
-                                )
-                                break
-                            }
-                        }
-                    }
-
-                    if (qualities.isNotEmpty()) {
-                        val safeTitle = title.replace(Regex("""[\\/:*?"<>|\r\n\t]"""), " ").trim()
-                        val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
-
-                        return MediaInspectResult(
-                            title = fileName,
-                            originalUrl = cleanUrl,
-                            hostPlatform = "YouTube ($author)",
-                            fileType = FileType.VIDEO,
-                            totalSizeText = qualities.first().estimatedSize,
-                            totalSizeBytes = qualities.first().estimatedBytes,
-                            mimeType = "video/mp4",
-                            supportsMultiThread = true,
-                            qualityOptions = qualities,
-                            author = author,
-                            durationText = durationFormatted,
-                            thumbnailUrl = thumb
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                // continue to next invidious
-            }
-        }
-        return null
-    }
-
-    private fun extractFromOembed(
-        cleanUrl: String,
-        videoId: String,
-        httpClient: OkHttpClient
-    ): MediaInspectResult? {
-        try {
-            val oembedUrl = "https://www.youtube.com/oembed?url=${URLEncoder.encode(cleanUrl, "UTF-8")}&format=json"
-            val request = Request.Builder()
-                .url(oembedUrl)
-                .header("User-Agent", BROWSER_USER_AGENT)
-                .build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return null
-                    val json = JSONObject(body)
-                    val title = json.optString("title", "YouTube Video ($videoId)").take(70)
-                    val author = json.optString("author_name", "YouTube")
-                    val thumb = json.optString("thumbnail_url").ifBlank { "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" }
-
-                    val safeTitle = title.replace(Regex("""[\\/:*?"<>|\r\n\t]"""), " ").trim()
-                    val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
-
-                    val qualities = listOf(
-                        MediaQualityOption(
-                            id = "yt_oembed_hd",
-                            title = "High Definition Video (720p / 1080p MP4)",
-                            resolution = "1080p HD",
-                            format = "MP4 Video",
-                            estimatedSize = "48.0 MB",
-                            estimatedBytes = 50_331_648L,
-                            directDownloadUrl = cleanUrl
-                        ),
-                        MediaQualityOption(
-                            id = "yt_oembed_audio",
-                            title = "Sadece Ses İndir (MP3 Formatı)",
-                            resolution = "Stereo Audio",
-                            format = "MP3 Audio",
-                            estimatedSize = "7.5 MB",
-                            estimatedBytes = 7_864_320L,
-                            isAudioOnly = true,
-                            directDownloadUrl = cleanUrl
-                        )
-                    )
-
-                    return MediaInspectResult(
-                        title = fileName,
-                        originalUrl = cleanUrl,
-                        hostPlatform = "YouTube ($author)",
-                        fileType = FileType.VIDEO,
-                        totalSizeText = "48.0 MB",
-                        totalSizeBytes = 50_331_648L,
-                        mimeType = "video/mp4",
-                        supportsMultiThread = true,
-                        qualityOptions = qualities,
-                        author = author,
-                        durationText = "YouTube Video",
-                        thumbnailUrl = thumb
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            // ignore
         }
         return null
     }
