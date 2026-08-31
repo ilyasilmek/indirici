@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer glow ring -->
+    <path
+        android:pathData="M54,22 C71.67,22 86,36.33 86,54 C86,71.67 71.67,86 54,86 C36.33,86 22,71.67 22,54 C22,36.33 36.33,22 54,22 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#4038BDF8"
+        android:fillColor="#1038BDF8" />
+
+    <!-- Download Tray base -->
+    <path
+        android:pathData="M34,68 L34,74 C34,76.2 35.8,78 38,78 L70,78 C72.2,78 74,76.2 74,74 L74,68"
+        android:strokeWidth="4"
+        android:strokeColor="#38BDF8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Download Speed Stream Down Arrow -->
+    <path
+        android:pathData="M54,30 L54,64 M40,50 L54,64 L68,50">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="54"
+                android:startY="30"
+                android:endX="54"
+                android:endY="64"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#A855F7" />
+                <item android:offset="0.5" android:color="#6366F1" />
+                <item android:offset="1.0" android:color="#38BDF8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Speed dots / packet blips -->
+    <path
+        android:pathData="M54,30 L54,64 M40,50 L54,64 L68,50"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,73m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+</vector>
