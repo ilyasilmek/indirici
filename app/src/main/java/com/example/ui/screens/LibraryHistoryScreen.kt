@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -280,14 +283,36 @@ fun LibraryHistoryScreen(
                 items(filteredList, key = { it.id }) { item ->
                     LibraryHistoryItemCard(
                         item = item,
-                        onOpen = { viewModel.openMediaPreview(item) },
-                        onShare = {
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, item.fileName)
-                                putExtra(Intent.EXTRA_TEXT, "OmniGet ile indirildi: ${item.fileName}\nKaynak: ${item.url}")
+                        onOpen = {
+                            val file = File(item.filePath)
+                            if (item.filePath.isBlank() || !file.exists()) {
+                                viewModel.showSnack("Dosya bulunamadı. Silinmiş veya taşınmış olabilir.")
+                            } else {
+                                try {
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, item.mimeType.ifBlank { "*/*" })
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(viewIntent)
+                                } catch (e: ActivityNotFoundException) {
+                                    viewModel.showSnack("Bu dosya türünü açabilecek bir uygulama bulunamadı.")
+                                }
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Dosyayı Paylaş"))
+                        },
+                        onShare = {
+                            val file = File(item.filePath)
+                            if (item.filePath.isBlank() || !file.exists()) {
+                                viewModel.showSnack("Dosya bulunamadı, paylaşılamıyor.")
+                            } else {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = item.mimeType.ifBlank { "*/*" }
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Dosyayı Paylaş"))
+                            }
                         },
                         onShowDetails = { itemDetailsToShow = item },
                         onDelete = { itemToDelete = item }

@@ -48,10 +48,6 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     private val _selectedCategoryFilter = MutableStateFlow<FileType?>(null)
     val selectedCategoryFilter: StateFlow<FileType?> = _selectedCategoryFilter.asStateFlow()
 
-    // Preview / Playback Modal
-    private val _activeMediaPreview = MutableStateFlow<DownloadEntity?>(null)
-    val activeMediaPreview: StateFlow<DownloadEntity?> = _activeMediaPreview.asStateFlow()
-
     // Quick Action Snack message
     private val _snackMessage = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snackMessage.asStateFlow()
@@ -108,14 +104,6 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
 
     fun setCategoryFilter(category: FileType?) {
         _selectedCategoryFilter.value = category
-    }
-
-    fun openMediaPreview(item: DownloadEntity) {
-        _activeMediaPreview.value = item
-    }
-
-    fun closeMediaPreview() {
-        _activeMediaPreview.value = null
     }
 
     fun clearSnackMessage() {

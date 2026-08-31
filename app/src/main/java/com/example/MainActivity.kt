@@ -55,7 +55,6 @@ import com.example.ui.components.OmniGetTopAppBar
 import com.example.ui.screens.ActiveDownloadsScreen
 import com.example.ui.screens.DownloaderScreen
 import com.example.ui.screens.LibraryHistoryScreen
-import com.example.ui.screens.MediaViewerDialog
 import com.example.ui.screens.SettingsSmartModeScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.OmniCyan
@@ -126,7 +125,6 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
     val allDownloads by viewModel.allDownloads.collectAsStateWithLifecycle()
     val totalSpeed by viewModel.totalSpeedFormatted.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val activeMediaPreview by viewModel.activeMediaPreview.collectAsStateWithLifecycle()
     val navigateToDownloaderEvent by viewModel.navigateToDownloaderEvent.collectAsStateWithLifecycle()
 
     val isWifi = viewModel.isWifiActive()
@@ -234,14 +232,6 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
                         viewModel = viewModel
                     )
                 }
-            }
-
-            // Media Viewer Modal
-            if (activeMediaPreview != null) {
-                MediaViewerDialog(
-                    item = activeMediaPreview!!,
-                    onDismiss = { viewModel.closeMediaPreview() }
-                )
             }
         }
     }
