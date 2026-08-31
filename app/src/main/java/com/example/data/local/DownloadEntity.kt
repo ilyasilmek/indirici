@@ -25,7 +25,10 @@ data class DownloadEntity(
     val isCourseBundle: Boolean = false,
     val courseChapter: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    // When set, the downloaded video is downscaled to this height (if the
+    // source is taller) after completion. Null means "keep the source as is".
+    val targetHeight: Int? = null
 ) {
     val progressPercent: Float
         get() = if (totalBytes > 0) {

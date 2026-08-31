@@ -88,9 +88,9 @@ object TwitterExtractor {
                             ),
                             MediaQualityOption(
                                 id = "x_audio_mp3",
-                                title = "Sadece Ses (MP3 320kbps)",
+                                title = "Sadece Ses (M4A / AAC)",
                                 resolution = "Stereo Audio",
-                                format = "MP3 Audio",
+                                format = "M4A Audio",
                                 estimatedSize = "2.8 MB",
                                 estimatedBytes = 2_936_012L,
                                 isAudioOnly = true,
@@ -174,9 +174,9 @@ object TwitterExtractor {
                                 ),
                                 MediaQualityOption(
                                     id = "x_synd_audio",
-                                    title = "Sadece Ses İndir (MP3)",
+                                    title = "Sadece Ses İndir (M4A / AAC)",
                                     resolution = "Stereo Audio",
-                                    format = "MP3 Audio",
+                                    format = "M4A Audio",
                                     estimatedSize = "3.1 MB",
                                     estimatedBytes = 3_250_585L,
                                     isAudioOnly = true,

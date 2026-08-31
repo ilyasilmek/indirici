@@ -150,8 +150,11 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun startDownloadWithQuality(result: MediaInspectResult, option: MediaQualityOption) {
-        val finalFileName = if (option.isAudioOnly && !result.title.endsWith(".mp3", ignoreCase = true)) {
-            "${result.title.substringBeforeLast('.')}.mp3"
+        // Audio-only downloads that turn out to need real extraction land as
+        // .m4a (see DownloadManager.postProcess); name the request that way
+        // from the start so there's no mismatch once it completes.
+        val finalFileName = if (option.isAudioOnly && !result.title.endsWith(".m4a", ignoreCase = true)) {
+            "${result.title.substringBeforeLast('.')}.m4a"
         } else if (!result.title.contains('.')) {
             "${result.title}.${option.format.lowercase()}"
         } else {
@@ -166,7 +169,8 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
             mimeType = result.mimeType,
             thumbnailUrl = result.thumbnailUrl,
             threadsCount = _selectedThreads.value,
-            isCourseBundle = result.isCourseBundle
+            isCourseBundle = result.isCourseBundle,
+            targetHeight = option.targetHeight
         )
 
         _inspectResult.value = null

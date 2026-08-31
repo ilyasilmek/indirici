@@ -252,13 +252,17 @@ object InstagramExtractor {
                 format = "MP4 Video",
                 estimatedSize = "11.2 MB",
                 estimatedBytes = 11_744_051L,
-                directDownloadUrl = directVideoUrl
+                directDownloadUrl = directVideoUrl,
+                // Instagram only exposes one real source file; this option is
+                // honest only because DownloadManager actually downscales to
+                // 720p locally after downloading (see MediaTranscoder).
+                targetHeight = 720
             ),
             MediaQualityOption(
                 id = "ig_audio_mp3",
-                title = "Reel Arka Plan Sesi (MP3 320kbps)",
+                title = "Reel Arka Plan Sesi (M4A / AAC)",
                 resolution = "HQ Stereo Ses",
-                format = "MP3 Audio",
+                format = "M4A Audio",
                 estimatedSize = "3.4 MB",
                 estimatedBytes = 3_565_158L,
                 isAudioOnly = true,

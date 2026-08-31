@@ -86,9 +86,9 @@ object TelegramExtractor {
                     ),
                     MediaQualityOption(
                         id = "tg_audio_extract",
-                        title = "Sadece Ses (MP3 Formatı)",
+                        title = "Sadece Ses (M4A / AAC)",
                         resolution = "Stereo Audio",
-                        format = "MP3 Audio",
+                        format = "M4A Audio",
                         estimatedSize = "4.2 MB",
                         estimatedBytes = 4_404_019L,
                         isAudioOnly = true,

@@ -49,7 +49,11 @@ data class MediaQualityOption(
     val estimatedSize: String,
     val estimatedBytes: Long,
     val isAudioOnly: Boolean = false,
-    val directDownloadUrl: String
+    val directDownloadUrl: String,
+    // When set, the source is downscaled to this height after download if it
+    // turns out to actually be taller (some extractors only have one real
+    // source file and label multiple "quality" tiers off of it).
+    val targetHeight: Int? = null
 )
 
 data class MediaInspectResult(

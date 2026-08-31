@@ -37,7 +37,7 @@ object UrlInspector {
             // revoked) - confirmed directly, not just in this app. Replaced with
             // Google's own ExoPlayer team test-media bucket, which is still public
             // and actively used by their demo app.
-            title = "Big Buck Bunny - Open Source HD Animation (1080p)",
+            title = "Big Buck Bunny - Open Source HD Animation",
             originalUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4",
             hostPlatform = "Blender Open Media",
             fileType = FileType.VIDEO,
@@ -49,19 +49,13 @@ object UrlInspector {
             durationText = "09:56",
             thumbnailUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
             qualityOptions = listOf(
+                // The real source is 320x180 - this used to advertise fake
+                // "1080p" and "720p" options that were both the exact same
+                // file. One honest option instead of a fake resolution picker.
                 MediaQualityOption(
-                    id = "1080p",
-                    title = "Full HD (1080p Video)",
-                    resolution = "1920x1080",
-                    format = "MP4 (H.264)",
-                    estimatedSize = "61.7 MB",
-                    estimatedBytes = 64657027L,
-                    directDownloadUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4"
-                ),
-                MediaQualityOption(
-                    id = "720p",
-                    title = "HD (720p Video)",
-                    resolution = "1280x720",
+                    id = "original",
+                    title = "Orijinal Kalite Video (MP4)",
+                    resolution = "320x180",
                     format = "MP4 (H.264)",
                     estimatedSize = "61.7 MB",
                     estimatedBytes = 64657027L,

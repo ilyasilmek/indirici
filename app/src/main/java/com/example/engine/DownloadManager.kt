@@ -83,7 +83,8 @@ class DownloadManager(
         thumbnailUrl: String? = null,
         threadsCount: Int = 4,
         isCourseBundle: Boolean = false,
-        courseChapter: String? = null
+        courseChapter: String? = null,
+        targetHeight: Int? = null
     ): Job = managerScope.launch {
         val entity = DownloadEntity(
             url = url,
@@ -97,7 +98,8 @@ class DownloadManager(
             threadsCount = threadsCount,
             isCourseBundle = isCourseBundle,
             courseChapter = courseChapter,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            targetHeight = targetHeight
         )
 
         val id = repository.insertDownload(entity)
@@ -405,19 +407,27 @@ class DownloadManager(
                     return
                 }
 
+                val finalFile = postProcess(item, targetFile, targetDir)
+                if (finalFile == null) {
+                    val reason = "Medya işlenemedi (ses ayrıştırma başarısız oldu)"
+                    repository.markFailed(downloadId, reason)
+                    NotificationHelper.showDownloadFailedNotification(context, item.copy(status = DownloadStatus.FAILED), reason)
+                    return
+                }
+
+                val finalSize = finalFile.length()
                 val completedItem = item.copy(
-                    downloadedBytes = downloadedBytes,
-                    totalBytes = if (totalBytes > 0) totalBytes else downloadedBytes,
+                    downloadedBytes = finalSize,
+                    totalBytes = finalSize,
                     status = DownloadStatus.COMPLETED,
-                    filePath = targetFile.absolutePath,
+                    filePath = finalFile.absolutePath,
+                    fileName = finalFile.name,
+                    speedBytesPerSec = 0L,
+                    etaSeconds = 0L,
                     completedAt = System.currentTimeMillis()
                 )
 
-                repository.markCompleted(
-                    id = downloadId,
-                    completedAt = System.currentTimeMillis(),
-                    filePath = targetFile.absolutePath
-                )
+                repository.updateDownload(completedItem)
 
                 if (settings.notificationSound || settings.notificationVibration) {
                     NotificationHelper.showDownloadCompletedNotification(context, completedItem)
@@ -438,6 +448,70 @@ class DownloadManager(
             activeJobs.remove(downloadId)
             checkAndProcessQueue()
         }
+    }
+
+    /**
+     * Runs after a raw download finishes, before it's marked COMPLETED.
+     * - Audio-only requests: if the file actually has a video track, extract
+     *   real audio into a .m4a file (fixes quality options that reused a
+     *   video URL and just got renamed to .mp3 - never playable as audio).
+     *   If the file has no video track, it's already genuine audio; skip.
+     * - Resolution-limited requests: if the file is taller than the
+     *   requested height, downscale it. On failure here we keep the original
+     *   file (still valid, just larger than requested) instead of failing
+     *   the whole download.
+     * Returns null only when the download cannot honestly be delivered as
+     * requested (audio extraction failed).
+     */
+    private suspend fun postProcess(item: DownloadEntity, file: File, targetDir: File): File? {
+        val probe = try {
+            MediaTranscoder.probe(file)
+        } catch (e: Exception) {
+            return file
+        }
+
+        if (item.fileType == FileType.AUDIO && probe.hasVideo) {
+            // Must not collide with `file`'s own name (audio-only requests are
+            // already named "*.m4a" up front by the ViewModel) - Transformer
+            // would otherwise read from the same path this deletes first.
+            val scratchOut = File(targetDir, "${file.name}.extracted.m4a")
+            if (scratchOut.exists()) scratchOut.delete()
+            val ok = try {
+                MediaTranscoder.extractAudio(context, file, scratchOut)
+            } catch (e: Exception) {
+                false
+            }
+            if (!ok) {
+                scratchOut.delete()
+                return null
+            }
+            val finalName = "${file.nameWithoutExtension}.m4a"
+            file.delete()
+            val finalOut = File(targetDir, finalName)
+            if (finalOut.exists()) finalOut.delete()
+            scratchOut.renameTo(finalOut)
+            return finalOut
+        }
+
+        val targetHeight = item.targetHeight
+        if (targetHeight != null && probe.hasVideo && probe.height > targetHeight) {
+            val scratchOut = File(targetDir, "${file.name}.resized")
+            if (scratchOut.exists()) scratchOut.delete()
+            val ok = try {
+                MediaTranscoder.downscale(context, file, scratchOut, targetHeight)
+            } catch (e: Exception) {
+                false
+            }
+            if (ok) {
+                file.delete()
+                val finalOut = File(targetDir, file.name)
+                scratchOut.renameTo(finalOut)
+                return finalOut
+            }
+            scratchOut.delete()
+        }
+
+        return file
     }
 
     private fun sanitizeFileName(name: String): String {
