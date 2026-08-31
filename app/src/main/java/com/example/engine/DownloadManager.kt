@@ -175,7 +175,7 @@ class DownloadManager(
 
     fun resumeAll() {
         managerScope.launch {
-            val queued = repository.getQueuedDownloads()
+            repository.resumeAllPaused()
             checkAndProcessQueue()
         }
     }
@@ -264,6 +264,10 @@ class DownloadManager(
         var currentSpeed = 0L
         var lastDbUpdateTime = 0L
 
+        var response: okhttp3.Response? = null
+        var outputStream: FileOutputStream? = null
+        var inputStream: InputStream? = null
+
         try {
             val requestBuilder = Request.Builder()
                 .url(item.url)
@@ -288,7 +292,7 @@ class DownloadManager(
             }
 
             val call = httpClient.newCall(requestBuilder.build())
-            val response = call.execute()
+            response = call.execute()
 
             if (!response.isSuccessful && response.code != 206) {
                 // If Range not supported and 416, restart from 0
@@ -319,21 +323,23 @@ class DownloadManager(
                 }
             }
 
-            val outputStream = if (downloadedBytes > 0 && response.code == 206) {
+            val activeOutputStream = if (downloadedBytes > 0 && response.code == 206) {
                 FileOutputStream(tempFile, true)
             } else {
                 FileOutputStream(tempFile, false)
             }
+            outputStream = activeOutputStream
 
-            val inputStream: InputStream = body.byteStream()
+            val activeInputStream: InputStream = body.byteStream()
+            inputStream = activeInputStream
             val buffer = ByteArray(32 * 1024) // 32KB buffer for speed
             var bytesRead: Int
 
             while (coroutineContext.isActive && !pausedFlags[downloadId]?.get().isTrue()) {
-                bytesRead = inputStream.read(buffer)
+                bytesRead = activeInputStream.read(buffer)
                 if (bytesRead == -1) break
 
-                outputStream.write(buffer, 0, bytesRead)
+                activeOutputStream.write(buffer, 0, bytesRead)
                 downloadedBytes += bytesRead
                 bytesSinceLastSpeedCalc += bytesRead
 
@@ -373,17 +379,23 @@ class DownloadManager(
                 }
             }
 
-            outputStream.flush()
-            outputStream.close()
-            inputStream.close()
+            activeOutputStream.flush()
+            activeOutputStream.close()
+            activeInputStream.close()
             response.close()
+            outputStream = null
+            inputStream = null
 
             if (pausedFlags[downloadId]?.get().isTrue()) {
                 repository.updateStatus(downloadId, DownloadStatus.PAUSED)
             } else if (coroutineContext.isActive) {
                 // Completed! Move tempFile to targetFile
                 if (targetFile.exists()) targetFile.delete()
-                tempFile.renameTo(targetFile)
+                val moved = tempFile.renameTo(targetFile)
+                if (!moved) {
+                    repository.markFailed(downloadId, "Dosya taşınamadı: hedef konuma yazılamadı")
+                    return
+                }
 
                 val completedItem = item.copy(
                     downloadedBytes = downloadedBytes,
@@ -412,13 +424,21 @@ class DownloadManager(
             val failedItem = item.copy(status = DownloadStatus.FAILED)
             NotificationHelper.showDownloadFailedNotification(context, failedItem, e.localizedMessage ?: "Bağlantı kesildi")
         } finally {
+            try { inputStream?.close() } catch (_: Exception) {}
+            try { outputStream?.close() } catch (_: Exception) {}
+            try { response?.close() } catch (_: Exception) {}
             activeJobs.remove(downloadId)
             checkAndProcessQueue()
         }
     }
 
     private fun sanitizeFileName(name: String): String {
-        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "OmniGet_File" }
+        val cleaned = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+        return when {
+            cleaned.isBlank() -> "OmniGet_File"
+            cleaned == "." || cleaned == ".." || cleaned.all { it == '.' } -> "OmniGet_File"
+            else -> cleaned
+        }
     }
 }
 

@@ -19,6 +19,7 @@ class DownloadService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var isForegroundRunning = false
+    private var isObservingDownloads = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -74,7 +75,9 @@ class DownloadService : Service() {
     }
 
     private fun observeDownloads() {
+        if (isObservingDownloads) return
         val repository = (applicationContext as? OmniGetApplication)?.repository ?: return
+        isObservingDownloads = true
 
         serviceScope.launch {
             repository.activeDownloads.collectLatest { activeList ->

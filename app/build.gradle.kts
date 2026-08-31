@@ -31,12 +31,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -46,7 +40,10 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    // debug uses AGP's built-in default debug signing config, which auto-generates
+    // (and reuses) ~/.android/debug.keystore. A custom debugConfig pointing at a
+    // repo-local debug.keystore broke every fresh clone, since that file is
+    // gitignored and nothing ever creates it.
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11

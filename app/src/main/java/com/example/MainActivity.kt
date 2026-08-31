@@ -102,8 +102,7 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!sharedText.isNullOrBlank()) {
-                viewModel.onUrlInputChanged(sharedText)
-                viewModel.inspectUrl(sharedText)
+                viewModel.handleSharedUrl(sharedText)
             }
         }
     }
@@ -128,6 +127,7 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
     val totalSpeed by viewModel.totalSpeedFormatted.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val activeMediaPreview by viewModel.activeMediaPreview.collectAsStateWithLifecycle()
+    val navigateToDownloaderEvent by viewModel.navigateToDownloaderEvent.collectAsStateWithLifecycle()
 
     val isWifi = viewModel.isWifiActive()
 
@@ -135,6 +135,12 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
         snackMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearSnackMessage()
+        }
+    }
+
+    LaunchedEffect(navigateToDownloaderEvent) {
+        if (navigateToDownloaderEvent > 0) {
+            currentTab = NavigationTab.DOWNLOADER
         }
     }
 

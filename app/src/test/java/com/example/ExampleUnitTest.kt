@@ -17,17 +17,17 @@ class ExampleUnitTest {
     @Test
     fun testFileSizeFormatting() {
         assertEquals("500 B", NotificationHelper.formatFileSize(500L))
-        assertEquals("1024 B", NotificationHelper.formatFileSize(1024L))
+        assertEquals("1.0 KB", NotificationHelper.formatFileSize(1024L))
         assertEquals("1.5 KB", NotificationHelper.formatFileSize(1536L))
-        assertEquals("10.0 MB", NotificationHelper.formatFileSize(10 * 1024 * 1024L))
-        assertEquals("1.5 GB", NotificationHelper.formatFileSize((1.5 * 1024 * 1024 * 1024).toLong()))
+        assertEquals("10.00 MB", NotificationHelper.formatFileSize(10 * 1024 * 1024L))
+        assertEquals("1.50 GB", NotificationHelper.formatFileSize((1.5 * 1024 * 1024 * 1024).toLong()))
     }
 
     @Test
     fun testSpeedFormatting() {
         assertEquals("0 KB/s", NotificationHelper.formatSpeed(0L))
-        assertEquals("500.0 KB/s", NotificationHelper.formatSpeed(500 * 1024L))
-        assertEquals("4.2 MB/s", NotificationHelper.formatSpeed((4.2 * 1024 * 1024).toLong()))
+        assertEquals("500 KB/s", NotificationHelper.formatSpeed(500 * 1024L))
+        assertEquals("4.20 MB/s", NotificationHelper.formatSpeed((4.2 * 1024 * 1024).toLong()))
     }
 
     @Test

@@ -56,6 +56,11 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     private val _snackMessage = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snackMessage.asStateFlow()
 
+    // Bumped whenever a URL is shared into the app from another app, so the UI
+    // can switch to the Downloader tab even if it was showing a different tab.
+    private val _navigateToDownloaderEvent = MutableStateFlow(0)
+    val navigateToDownloaderEvent: StateFlow<Int> = _navigateToDownloaderEvent.asStateFlow()
+
     // Settings
     val settings: StateFlow<NetworkSettings> = repository.settingsFlow
 
@@ -143,6 +148,12 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
                 _isInspecting.value = false
             }
         }
+    }
+
+    fun handleSharedUrl(url: String) {
+        onUrlInputChanged(url)
+        inspectUrl(url)
+        _navigateToDownloaderEvent.value += 1
     }
 
     fun clearInspectResult() {

@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.data.local.DownloadEntity
+import java.util.Locale
 
 object NotificationHelper {
 
@@ -151,9 +152,9 @@ object NotificationHelper {
         val mb = kb / 1024.0
         val gb = mb / 1024.0
         return when {
-            gb >= 1.0 -> String.format("%.2f GB", gb)
-            mb >= 1.0 -> String.format("%.2f MB", mb)
-            kb >= 1.0 -> String.format("%.1f KB", kb)
+            gb >= 1.0 -> String.format(Locale.US, "%.2f GB", gb)
+            mb >= 1.0 -> String.format(Locale.US, "%.2f MB", mb)
+            kb >= 1.0 -> String.format(Locale.US, "%.1f KB", kb)
             else -> "$bytes B"
         }
     }
@@ -163,9 +164,9 @@ object NotificationHelper {
         val kb = bytesPerSec / 1024.0
         val mb = kb / 1024.0
         return if (mb >= 1.0) {
-            String.format("%.2f MB/s", mb)
+            String.format(Locale.US, "%.2f MB/s", mb)
         } else {
-            String.format("%.0f KB/s", kb)
+            String.format(Locale.US, "%.0f KB/s", kb)
         }
     }
 }

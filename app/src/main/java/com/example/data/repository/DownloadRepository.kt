@@ -74,6 +74,8 @@ class DownloadRepository(
 
     suspend fun clearCompleted() = downloadDao.clearCompleted()
 
+    suspend fun resumeAllPaused() = downloadDao.resumeAllPaused()
+
     suspend fun clearAll() = downloadDao.clearAll()
 
     suspend fun getDownloadById(id: Long): DownloadEntity? = downloadDao.getDownloadByIdDirect(id)

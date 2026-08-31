@@ -66,6 +66,9 @@ interface DownloadDao {
     @Query("DELETE FROM downloads WHERE status = 'COMPLETED'")
     suspend fun clearCompleted()
 
+    @Query("UPDATE downloads SET status = 'QUEUED' WHERE status = 'PAUSED'")
+    suspend fun resumeAllPaused()
+
     @Query("DELETE FROM downloads")
     suspend fun clearAll()
 }
