@@ -3,6 +3,7 @@ package com.example.engine.extractors
 import com.example.data.model.FileType
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
+import com.example.engine.UrlInspector
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,7 +13,7 @@ import org.json.JSONObject
 
 object TwitterExtractor {
 
-    private val BROWSER_USER_AGENT =
+    private const val BROWSER_USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
     fun matches(url: String): Boolean {
@@ -76,23 +77,39 @@ object TwitterExtractor {
                         val safeTitle = text.replace(Regex("""[\\/:*?"<>|\r\n\t]"""), " ").trim().ifBlank { "X_Video_$tweetId" }
                         val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
 
+                        val probedBytes = UrlInspector.probeContentLength(videoUrl, "https://x.com/")
+                        val videoBytes = if (probedBytes > 0) probedBytes else 14_889_799L
+                        val videoSizeText = if (probedBytes > 0) NotificationHelper.formatFileSize(probedBytes) else "~14.2 MB"
+                        val audioBytes = (videoBytes * 0.20).toLong()
+                        val audioSizeText = "~${NotificationHelper.formatFileSize(audioBytes)}"
+
                         val qualities = listOf(
                             MediaQualityOption(
                                 id = "x_video_hd",
                                 title = "Yüksek Kalite Video (MP4)",
                                 resolution = "HD Video",
                                 format = "MP4 Video",
-                                estimatedSize = "14.2 MB",
-                                estimatedBytes = 14_889_799L,
+                                estimatedSize = videoSizeText,
+                                estimatedBytes = videoBytes,
                                 directDownloadUrl = videoUrl
+                            ),
+                            MediaQualityOption(
+                                id = "x_video_720p",
+                                title = "Optimize Edilmiş Video (720p MP4)",
+                                resolution = "720p HD",
+                                format = "MP4 Video",
+                                estimatedSize = "~${NotificationHelper.formatFileSize((videoBytes * 0.6).toLong())}",
+                                estimatedBytes = (videoBytes * 0.6).toLong(),
+                                directDownloadUrl = videoUrl,
+                                targetHeight = 720
                             ),
                             MediaQualityOption(
                                 id = "x_audio_mp3",
                                 title = "Sadece Ses (M4A / AAC)",
                                 resolution = "Stereo Audio",
                                 format = "M4A Audio",
-                                estimatedSize = "2.8 MB",
-                                estimatedBytes = 2_936_012L,
+                                estimatedSize = audioSizeText,
+                                estimatedBytes = audioBytes,
                                 isAudioOnly = true,
                                 directDownloadUrl = videoUrl
                             )
@@ -103,8 +120,8 @@ object TwitterExtractor {
                             originalUrl = cleanUrl,
                             hostPlatform = "X / Twitter ($userName)",
                             fileType = FileType.VIDEO,
-                            totalSizeText = "14.2 MB",
-                            totalSizeBytes = 14_889_799L,
+                            totalSizeText = videoSizeText,
+                            totalSizeBytes = videoBytes,
                             mimeType = "video/mp4",
                             supportsMultiThread = true,
                             qualityOptions = qualities,
@@ -115,11 +132,11 @@ object TwitterExtractor {
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // vxtwitter failed
         }
 
-        // Strategy 2: Twitter Syndication API
+        // Strategy 2: Twitter Syndication API (exposes multiple MP4 bitrate variants)
         try {
             val syndicationUrl = "https://cdn.syndication.twimg.com/tweet-result?id=$tweetId&lang=en"
             val request = Request.Builder()
@@ -141,8 +158,8 @@ object TwitterExtractor {
                         val videoInfo = media?.optJSONObject("video_info")
                         val variants = videoInfo?.optJSONArray("variants")
 
-                        var bestVariantUrl = ""
-                        var maxBitrate = -1L
+                        data class Mp4Variant(val bitrate: Long, val url: String, val resLabel: String)
+                        val mp4Variants = mutableListOf<Mp4Variant>()
 
                         if (variants != null) {
                             for (i in 0 until variants.length()) {
@@ -151,36 +168,53 @@ object TwitterExtractor {
                                 val bitrate = v.optLong("bitrate", 0L)
                                 val vUrl = v.optString("url")
 
-                                if (ct == "video/mp4" && bitrate >= maxBitrate && vUrl.isNotBlank()) {
-                                    maxBitrate = bitrate
-                                    bestVariantUrl = vUrl
+                                if (ct == "video/mp4" && vUrl.isNotBlank()) {
+                                    val resMatch = Regex("""/(\d+x\d+)/""").find(vUrl)?.groupValues?.getOrNull(1) ?: "${bitrate / 1000} kbps"
+                                    mp4Variants.add(Mp4Variant(bitrate, vUrl, resMatch))
                                 }
                             }
                         }
 
-                        if (bestVariantUrl.isNotBlank()) {
+                        mp4Variants.sortByDescending { it.bitrate }
+
+                        if (mp4Variants.isNotEmpty()) {
                             val safeTitle = text.replace(Regex("""[\\/:*?"<>|\r\n\t]"""), " ").trim().ifBlank { "X_Video_$tweetId" }
                             val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
 
-                            val qualities = listOf(
-                                MediaQualityOption(
-                                    id = "x_synd_hd",
-                                    title = "HD Orijinal MP4 Video",
-                                    resolution = "HD Video",
-                                    format = "MP4 Video",
-                                    estimatedSize = "16.0 MB",
-                                    estimatedBytes = 16_777_216L,
-                                    directDownloadUrl = bestVariantUrl
-                                ),
+                            val bestVariant = mp4Variants.first()
+                            val bestProbedBytes = UrlInspector.probeContentLength(bestVariant.url, "https://x.com/")
+                            val primaryBytes = if (bestProbedBytes > 0) bestProbedBytes else 16_777_216L
+                            val primarySizeText = if (bestProbedBytes > 0) NotificationHelper.formatFileSize(bestProbedBytes) else "~16.0 MB"
+
+                            val qualities = mutableListOf<MediaQualityOption>()
+                            mp4Variants.take(3).forEachIndexed { idx, variant ->
+                                val vBytes = if (idx == 0) primaryBytes else {
+                                    val probed = UrlInspector.probeContentLength(variant.url, "https://x.com/")
+                                    if (probed > 0) probed else (primaryBytes * (idx + 1) / mp4Variants.size)
+                                }
+                                qualities.add(
+                                    MediaQualityOption(
+                                        id = "x_synd_$idx",
+                                        title = if (idx == 0) "En Yüksek Kalite MP4 (${variant.resLabel})" else "Alternatif Kalite MP4 (${variant.resLabel})",
+                                        resolution = variant.resLabel,
+                                        format = "MP4 Video",
+                                        estimatedSize = NotificationHelper.formatFileSize(vBytes),
+                                        estimatedBytes = vBytes,
+                                        directDownloadUrl = variant.url
+                                    )
+                                )
+                            }
+
+                            qualities.add(
                                 MediaQualityOption(
                                     id = "x_synd_audio",
                                     title = "Sadece Ses İndir (M4A / AAC)",
                                     resolution = "Stereo Audio",
                                     format = "M4A Audio",
-                                    estimatedSize = "3.1 MB",
-                                    estimatedBytes = 3_250_585L,
+                                    estimatedSize = "~${NotificationHelper.formatFileSize((primaryBytes * 0.20).toLong())}",
+                                    estimatedBytes = (primaryBytes * 0.20).toLong(),
                                     isAudioOnly = true,
-                                    directDownloadUrl = bestVariantUrl
+                                    directDownloadUrl = bestVariant.url
                                 )
                             )
 
@@ -189,8 +223,8 @@ object TwitterExtractor {
                                 originalUrl = cleanUrl,
                                 hostPlatform = "X / Twitter ($authorName)",
                                 fileType = FileType.VIDEO,
-                                totalSizeText = "16.0 MB",
-                                totalSizeBytes = 16_777_216L,
+                                totalSizeText = primarySizeText,
+                                totalSizeBytes = primaryBytes,
                                 mimeType = "video/mp4",
                                 supportsMultiThread = true,
                                 qualityOptions = qualities,
@@ -202,7 +236,7 @@ object TwitterExtractor {
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // syndication failed
         }
 

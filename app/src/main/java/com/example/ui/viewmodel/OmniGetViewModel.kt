@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.OmniGetApplication
 import com.example.data.local.DownloadEntity
+import com.example.data.model.DownloadStatus
 import com.example.data.model.FileType
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,7 +40,7 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     private val _inspectError = MutableStateFlow<String?>(null)
     val inspectError: StateFlow<String?> = _inspectError.asStateFlow()
 
-    private val _selectedThreads = MutableStateFlow(4)
+    private val _selectedThreads = MutableStateFlow(repository.settingsFlow.value.connectionThreadsPerFile.coerceIn(1, 8))
     val selectedThreads: StateFlow<Int> = _selectedThreads.asStateFlow()
 
     // Search and Category Filters for Library
@@ -56,6 +58,10 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     // can switch to the Downloader tab even if it was showing a different tab.
     private val _navigateToDownloaderEvent = MutableStateFlow(0)
     val navigateToDownloaderEvent: StateFlow<Int> = _navigateToDownloaderEvent.asStateFlow()
+
+    // Triggered when a notification is tapped with an OPEN_TAB intent extra
+    private val _requestedTabEvent = MutableStateFlow<String?>(null)
+    val requestedTabEvent: StateFlow<String?> = _requestedTabEvent.asStateFlow()
 
     // Settings
     val settings: StateFlow<NetworkSettings> = repository.settingsFlow
@@ -84,8 +90,10 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Overall aggregate download speed
-    val totalSpeedFormatted: StateFlow<String> = activeDownloads.combine(_urlInput) { activeList, _ ->
-        val totalBytesPerSec = activeList.filter { it.status.name == "DOWNLOADING" }.sumOf { it.speedBytesPerSec }
+    val totalSpeedFormatted: StateFlow<String> = activeDownloads.map { activeList ->
+        val totalBytesPerSec = activeList
+            .filter { it.status == DownloadStatus.DOWNLOADING }
+            .sumOf { it.speedBytesPerSec }
         NotificationHelper.formatSpeed(totalBytesPerSec)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "0 KB/s")
 
@@ -95,7 +103,9 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setThreadsCount(threads: Int) {
-        _selectedThreads.value = threads.coerceIn(1, 8)
+        val clamped = threads.coerceIn(1, 8)
+        _selectedThreads.value = clamped
+        repository.updateSettings(repository.settingsFlow.value.copy(connectionThreadsPerFile = clamped))
     }
 
     fun setSearchQuery(query: String) {
@@ -112,6 +122,14 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
 
     fun showSnack(msg: String) {
         _snackMessage.value = msg
+    }
+
+    fun onNotificationTabRequested(tabName: String) {
+        _requestedTabEvent.value = tabName.lowercase()
+    }
+
+    fun clearRequestedTabEvent() {
+        _requestedTabEvent.value = null
     }
 
     fun isWifiActive(): Boolean = downloadManager.isWifiConnected()
@@ -150,9 +168,6 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun startDownloadWithQuality(result: MediaInspectResult, option: MediaQualityOption) {
-        // Audio-only downloads that turn out to need real extraction land as
-        // .m4a (see DownloadManager.postProcess); name the request that way
-        // from the start so there's no mismatch once it completes.
         val finalFileName = if (option.isAudioOnly && !result.title.endsWith(".m4a", ignoreCase = true)) {
             "${result.title.substringBeforeLast('.')}.m4a"
         } else if (!result.title.contains('.')) {
@@ -245,6 +260,7 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updateSettings(newSettings: NetworkSettings) {
+        _selectedThreads.value = newSettings.connectionThreadsPerFile.coerceIn(1, 8)
         repository.updateSettings(newSettings)
         _snackMessage.value = "Ağ ve indirme ayarları güncellendi"
     }

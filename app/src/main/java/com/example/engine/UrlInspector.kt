@@ -4,6 +4,7 @@ import com.example.data.model.CourseLessonItem
 import com.example.data.model.FileType
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
+import com.example.engine.extractors.CourseExtractor
 import com.example.engine.extractors.InstagramExtractor
 import com.example.engine.extractors.TelegramExtractor
 import com.example.engine.extractors.TikTokExtractor
@@ -12,12 +13,16 @@ import com.example.engine.extractors.YouTubeExtractor
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 object UrlInspector {
+
+    private const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
     val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -29,14 +34,69 @@ object UrlInspector {
             .build()
     }
 
+    private val probeClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
+    /**
+     * Probes the actual byte length of a direct media URL via HEAD or Range: bytes=0-0.
+     * Returns -1L if the server does not disclose Content-Length.
+     */
+    fun probeContentLength(url: String, referer: String? = null): Long {
+        if (url.isBlank() || !url.startsWith("http")) return -1L
+        try {
+            val headBuilder = Request.Builder()
+                .url(url)
+                .head()
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .header("Accept", "*/*")
+            if (!referer.isNullOrBlank()) {
+                headBuilder.header("Referer", referer)
+            }
+            probeClient.newCall(headBuilder.build()).execute().use { response ->
+                if (response.isSuccessful) {
+                    val len = response.header("Content-Length")?.toLongOrNull() ?: -1L
+                    if (len > 0) return len
+                }
+            }
+        } catch (_: Exception) {
+            // Fall through to Range probe
+        }
+
+        try {
+            val rangeBuilder = Request.Builder()
+                .url(url)
+                .header("Range", "bytes=0-0")
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .header("Accept", "*/*")
+            if (!referer.isNullOrBlank()) {
+                rangeBuilder.header("Referer", referer)
+            }
+            probeClient.newCall(rangeBuilder.build()).execute().use { response ->
+                if (response.isSuccessful || response.code == 206) {
+                    val rangeHeader = response.header("Content-Range")
+                    if (rangeHeader != null && rangeHeader.contains("/")) {
+                        val total = rangeHeader.substringAfterLast("/").trim().toLongOrNull() ?: -1L
+                        if (total > 0) return total
+                    }
+                    val len = response.header("Content-Length")?.toLongOrNull() ?: -1L
+                    if (len > 1) return len
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore probe error
+        }
+        return -1L
+    }
+
     // High-Speed & Test Presets for instant user testing
     val PRESET_MEDIA_ITEMS = listOf(
         MediaInspectResult(
-            // The classic commondatastorage.googleapis.com/gtv-videos-bucket demo
-            // files Google published for years now return 403 (bucket access was
-            // revoked) - confirmed directly, not just in this app. Replaced with
-            // Google's own ExoPlayer team test-media bucket, which is still public
-            // and actively used by their demo app.
             title = "Big Buck Bunny - Open Source HD Animation",
             originalUrl = "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4",
             hostPlatform = "Blender Open Media",
@@ -49,9 +109,6 @@ object UrlInspector {
             durationText = "09:56",
             thumbnailUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
             qualityOptions = listOf(
-                // The real source is 320x180 - this used to advertise fake
-                // "1080p" and "720p" options that were both the exact same
-                // file. One honest option instead of a fake resolution picker.
                 MediaQualityOption(
                     id = "original",
                     title = "Orijinal Kalite Video (MP4)",
@@ -94,11 +151,6 @@ object UrlInspector {
                     format = "ZIP / Bundle",
                     estimatedSize = "142.5 MB",
                     estimatedBytes = 149422080L,
-                    // Synthetic payload from Cloudflare's own speed-test endpoint - a
-                    // real, stable, publicly documented service that serves back
-                    // exactly the requested byte count, which fits a "bundle" blob
-                    // (declared format is ZIP, not a playable video) far better than
-                    // relying on another third-party file host staying alive.
                     directDownloadUrl = "https://speed.cloudflare.com/__down?bytes=149422080"
                 ),
                 MediaQualityOption(
@@ -111,9 +163,6 @@ object UrlInspector {
                     directDownloadUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
                 )
             ),
-            // Real, currently-live sample videos from Google's ExoPlayer test-media
-            // bucket (confirmed reachable), sized to their actual content-length so
-            // the displayed size matches what actually downloads.
             courseLessons = listOf(
                 CourseLessonItem(1, "01. Introduction to Mobile Architecture", "14:20", "https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4", "61.7 MB", 64657027L),
                 CourseLessonItem(2, "02. High Performance Network Streams", "22:15", "https://storage.googleapis.com/exoplayer-test-media-1/mp4/dizzy-with-tx3g.mp4", "1.5 MB", 1609079L),
@@ -157,10 +206,6 @@ object UrlInspector {
             )
         ),
         MediaInspectResult(
-            // speed.hetzner.de/100MB.bin no longer resolves (confirmed directly).
-            // Cloudflare's own speed-test endpoint is the more fitting and durable
-            // replacement anyway: it's built exactly for this purpose and serves
-            // back precisely the byte count requested via ?bytes=.
             title = "Network Turbo Speed Benchmark (50 MB Test File)",
             originalUrl = "https://speed.cloudflare.com/__down?bytes=52428800",
             hostPlatform = "High-Speed CDN Mirror",
@@ -204,10 +249,6 @@ object UrlInspector {
             return@withContext matchingPreset
         }
 
-        // A URL recognized as belonging to one of these platforms must never fall
-        // through to inspectDirectHttp below: that treats whatever the URL returns
-        // (typically the platform's own HTML page) as if it were the downloadable
-        // file itself, silently "downloading" garbage instead of failing loudly.
         val isKnownSocialPlatform = InstagramExtractor.matches(cleanUrl) ||
             YouTubeExtractor.matches(cleanUrl) ||
             TelegramExtractor.matches(cleanUrl) ||
@@ -250,8 +291,96 @@ object UrlInspector {
             )
         }
 
-        // 7. Direct HTTP Probe for files / direct links / web downloads
+        // 7. Online Course Extractor (Udemy / Skool / Kiwify / Coursera / Teachable)
+        if (CourseExtractor.matches(cleanUrl)) {
+            val courseResult = CourseExtractor.extract(cleanUrl, httpClient)
+            if (courseResult != null) return@withContext courseResult
+        }
+
+        // 8. HLS (.m3u8) Stream Playlist Inspection
+        if (cleanUrl.substringBefore('?').endsWith(".m3u8", ignoreCase = true)) {
+            val hlsResult = inspectHlsPlaylist(cleanUrl)
+            if (hlsResult != null) return@withContext hlsResult
+        }
+
+        // 9. Direct HTTP Probe for files / direct links / web downloads
         return@withContext inspectDirectHttp(cleanUrl)
+    }
+
+    private fun inspectHlsPlaylist(cleanUrl: String): MediaInspectResult? {
+        return try {
+            val request = Request.Builder()
+                .url(cleanUrl)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body?.string() ?: return null
+                if (!body.contains("#EXTM3U")) return null
+
+                val baseName = extractFileNameFromUrl(cleanUrl).substringBeforeLast('.')
+                val finalTitle = "$baseName.mp4"
+                val lines = body.lines().map { it.trim() }
+                val qualities = mutableListOf<MediaQualityOption>()
+
+                var i = 0
+                var variantIdx = 1
+                while (i < lines.size) {
+                    val line = lines[i]
+                    if (line.startsWith("#EXT-X-STREAM-INF:")) {
+                        val resMatch = Regex("""RESOLUTION=(\d+x\d+)""").find(line)?.groupValues?.getOrNull(1) ?: "HD"
+                        val bwMatch = Regex("""BANDWIDTH=(\d+)""").find(line)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 2_500_000L
+                        val nextUrlLine = lines.drop(i + 1).firstOrNull { it.isNotBlank() && !it.startsWith("#") }
+                        if (nextUrlLine != null) {
+                            val resolvedVariantUrl = cleanUrl.toHttpUrlOrNull()?.resolve(nextUrlLine)?.toString() ?: nextUrlLine
+                            val estBytes = (bwMatch / 8) * 180L // Estimate ~3 min stream
+                            qualities.add(
+                                MediaQualityOption(
+                                    id = "hls_var_$variantIdx",
+                                    title = "HLS Akış Videosu ($resMatch)",
+                                    resolution = resMatch,
+                                    format = "HLS / TS-MP4",
+                                    estimatedSize = NotificationHelper.formatFileSize(estBytes),
+                                    estimatedBytes = estBytes,
+                                    directDownloadUrl = resolvedVariantUrl
+                                )
+                            )
+                            variantIdx++
+                        }
+                    }
+                    i++
+                }
+
+                if (qualities.isEmpty()) {
+                    qualities.add(
+                        MediaQualityOption(
+                            id = "hls_direct",
+                            title = "HLS Medya Akışı (Orijinal)",
+                            resolution = "Orijinal Akış",
+                            format = "HLS / TS-MP4",
+                            estimatedSize = "Akış (Stream)",
+                            estimatedBytes = -1L,
+                            directDownloadUrl = cleanUrl
+                        )
+                    )
+                }
+
+                MediaInspectResult(
+                    title = finalTitle,
+                    originalUrl = cleanUrl,
+                    hostPlatform = "HLS Medya Akışı (M3U8)",
+                    fileType = FileType.VIDEO,
+                    totalSizeText = qualities.first().estimatedSize,
+                    totalSizeBytes = qualities.first().estimatedBytes,
+                    mimeType = "video/mp4",
+                    supportsMultiThread = false,
+                    qualityOptions = qualities
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun inspectDirectHttp(cleanUrl: String): MediaInspectResult {
@@ -262,11 +391,10 @@ object UrlInspector {
         var acceptRanges = false
 
         try {
-            // Attempt HEAD request
             val headRequest = Request.Builder()
                 .url(cleanUrl)
                 .head()
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                .header("User-Agent", BROWSER_USER_AGENT)
                 .header("Accept", "*/*")
                 .build()
 
@@ -284,12 +412,11 @@ object UrlInspector {
                 }
             }
 
-            // If HEAD failed or gave no content-length, try GET with Range 0-0
             if (contentLength <= 0) {
                 val rangeRequest = Request.Builder()
                     .url(cleanUrl)
                     .header("Range", "bytes=0-0")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                    .header("User-Agent", BROWSER_USER_AGENT)
                     .header("Accept", "*/*")
                     .build()
 
@@ -304,8 +431,12 @@ object UrlInspector {
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Fallback heuristics
+        }
+
+        if (contentType.contains("mpegurl", ignoreCase = true)) {
+            inspectHlsPlaylist(cleanUrl)?.let { return it }
         }
 
         val fileType = FileType.fromMimeOrUrl(contentType, cleanUrl)
@@ -316,22 +447,34 @@ object UrlInspector {
             qualities.add(
                 MediaQualityOption(
                     id = "best_video",
-                    title = "En Yüksek Kalite (1080p / Orijinal MP4)",
-                    resolution = "1080p Full HD",
+                    title = "En Yüksek Kalite (Orijinal MP4)",
+                    resolution = "Orijinal HD",
                     format = "MP4",
                     estimatedSize = sizeFormatted,
-                    estimatedBytes = if (contentLength > 0) contentLength else 45_000_000L,
+                    estimatedBytes = if (contentLength > 0) contentLength else -1L,
                     directDownloadUrl = cleanUrl
                 )
             )
             qualities.add(
                 MediaQualityOption(
+                    id = "video_720p",
+                    title = "Optimize Edilmiş HD Video (720p MP4)",
+                    resolution = "720p HD",
+                    format = "MP4",
+                    estimatedSize = if (contentLength > 0) NotificationHelper.formatFileSize((contentLength * 0.6).toLong()) else "Bilinmiyor",
+                    estimatedBytes = if (contentLength > 0) (contentLength * 0.6).toLong() else -1L,
+                    directDownloadUrl = cleanUrl,
+                    targetHeight = 720
+                )
+            )
+            qualities.add(
+                MediaQualityOption(
                     id = "audio_extract",
-                    title = "Sadece Ses İndir (MP3 Formatı)",
-                    resolution = "320 kbps Audio",
-                    format = "MP3",
-                    estimatedSize = if (contentLength > 0) NotificationHelper.formatFileSize(contentLength / 6) else "10.0 MB",
-                    estimatedBytes = if (contentLength > 0) contentLength / 6 else 10_485_760L,
+                    title = "Sadece Ses İndir (M4A / AAC Formatı)",
+                    resolution = "Stereo Audio",
+                    format = "M4A",
+                    estimatedSize = if (contentLength > 0) NotificationHelper.formatFileSize(contentLength / 6) else "Bilinmiyor",
+                    estimatedBytes = if (contentLength > 0) contentLength / 6 else -1L,
                     isAudioOnly = true,
                     directDownloadUrl = cleanUrl
                 )
@@ -344,7 +487,7 @@ object UrlInspector {
                     resolution = "Orijinal",
                     format = fileName.substringAfterLast('.', "Dosya").uppercase(),
                     estimatedSize = sizeFormatted,
-                    estimatedBytes = if (contentLength > 0) contentLength else 20_000_000L,
+                    estimatedBytes = if (contentLength > 0) contentLength else -1L,
                     directDownloadUrl = cleanUrl
                 )
             )
@@ -358,7 +501,7 @@ object UrlInspector {
             totalSizeText = sizeFormatted,
             totalSizeBytes = contentLength,
             mimeType = contentType,
-            supportsMultiThread = acceptRanges || contentLength > 0,
+            supportsMultiThread = acceptRanges && contentLength > 0,
             qualityOptions = qualities
         )
     }
@@ -375,6 +518,8 @@ object UrlInspector {
             lower.contains("udemy.com") -> "Udemy Online Course"
             lower.contains("skool.com") -> "Skool Community Course"
             lower.contains("kiwify.com") -> "Kiwify Training Course"
+            lower.contains("coursera.org") -> "Coursera Online Course"
+            lower.contains("teachable.com") -> "Teachable Online Course"
             lower.contains("github.com") -> "GitHub Release / Archive"
             lower.contains("archive.org") -> "Internet Archive Media"
             lower.contains("google") || lower.contains("googleapis") -> "Google Cloud CDN"
@@ -392,7 +537,7 @@ object UrlInspector {
             } else {
                 "OmniGet_Download_${System.currentTimeMillis() % 100000}"
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "OmniGet_Download_${System.currentTimeMillis() % 100000}"
         }
     }
@@ -403,7 +548,7 @@ object UrlInspector {
         return if (match != null) {
             try {
                 URLDecoder.decode(match.groupValues[1].trim(), "UTF-8")
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 match.groupValues[1].trim()
             }
         } else {

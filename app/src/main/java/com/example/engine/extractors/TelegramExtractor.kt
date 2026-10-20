@@ -3,6 +3,7 @@ package com.example.engine.extractors
 import com.example.data.model.FileType
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
+import com.example.engine.UrlInspector
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,7 +12,7 @@ import okhttp3.Request
 
 object TelegramExtractor {
 
-    private val BROWSER_USER_AGENT =
+    private const val BROWSER_USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
     fun matches(url: String): Boolean {
@@ -38,10 +39,6 @@ object TelegramExtractor {
                 if (!response.isSuccessful) return@withContext null
                 val body = response.body?.string() ?: return@withContext null
 
-                // Extract video stream URL. A post without an inline <video> often still
-                // exposes telesco.pe file links for its JPEG preview thumbnails - those
-                // must never be accepted here, so every fallback below requires an
-                // explicit video extension rather than matching any telesco.pe link.
                 val videoSrcRegex = Regex("""<video[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
                 val videoExt = """(?:mp4|mov|mkv|webm|m4v)"""
                 val docHrefRegex = Regex("""<a[^>]+class=["'][^"']*tgme_widget_message_document_wrap[^"']*["'][^>]+href=["']([^"']+\.$videoExt(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE)
@@ -49,18 +46,14 @@ object TelegramExtractor {
 
                 val videoUrlMatch = videoSrcRegex.find(body) ?: docHrefRegex.find(body) ?: rawVideoRegex.find(body)
                 val directVideoUrl = videoUrlMatch?.groupValues?.getOrNull(1) ?: videoUrlMatch?.groupValues?.getOrNull(0)
-                    // No genuine video found (e.g. a text/photo-only post) - fail
-                    // honestly instead of "downloading" the Telegram post page itself.
                     ?: return@withContext null
 
-                // Extract thumbnail
                 val posterRegex = Regex("""<video[^>]+poster=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
                 val bgThumbRegex = Regex("""background-image:\s*url\(['"]?([^'"]+)['"]?\)""", RegexOption.IGNORE_CASE)
                 val thumbUrl = (posterRegex.find(body)?.groupValues?.getOrNull(1)
                     ?: bgThumbRegex.find(body)?.groupValues?.getOrNull(1))
                     ?.let { if (it.startsWith("//")) "https:$it" else it }
 
-                // Extract channel & title
                 val channelNameRegex = Regex("""<div class=["']tgme_widget_message_owner_name["']>[\s\S]*?<span dir=["']auto["']>([^<]+)</span>""", RegexOption.IGNORE_CASE)
                 val channelName = channelNameRegex.find(body)?.groupValues?.getOrNull(1)?.trim() ?: "Telegram Kanalı"
 
@@ -73,6 +66,11 @@ object TelegramExtractor {
                 val fileName = if (safeTitle.endsWith(".mp4", ignoreCase = true)) safeTitle else "$safeTitle.mp4"
 
                 val finalStreamUrl = directVideoUrl
+                val probedBytes = UrlInspector.probeContentLength(finalStreamUrl, "https://t.me/")
+                val videoBytes = if (probedBytes > 0) probedBytes else 23_488_102L
+                val videoSizeText = if (probedBytes > 0) NotificationHelper.formatFileSize(probedBytes) else "~22.4 MB"
+                val audioBytes = (videoBytes * 0.18).toLong()
+                val audioSizeText = "~${NotificationHelper.formatFileSize(audioBytes)}"
 
                 val qualities = listOf(
                     MediaQualityOption(
@@ -80,8 +78,8 @@ object TelegramExtractor {
                         title = "Orijinal Telegram Videosu (MP4)",
                         resolution = "HD Video",
                         format = "MP4 Video",
-                        estimatedSize = "22.4 MB",
-                        estimatedBytes = 23_488_102L,
+                        estimatedSize = videoSizeText,
+                        estimatedBytes = videoBytes,
                         directDownloadUrl = finalStreamUrl
                     ),
                     MediaQualityOption(
@@ -89,8 +87,8 @@ object TelegramExtractor {
                         title = "Sadece Ses (M4A / AAC)",
                         resolution = "Stereo Audio",
                         format = "M4A Audio",
-                        estimatedSize = "4.2 MB",
-                        estimatedBytes = 4_404_019L,
+                        estimatedSize = audioSizeText,
+                        estimatedBytes = audioBytes,
                         isAudioOnly = true,
                         directDownloadUrl = finalStreamUrl
                     )
@@ -101,8 +99,8 @@ object TelegramExtractor {
                     originalUrl = cleanUrl,
                     hostPlatform = "Telegram ($channelName)",
                     fileType = FileType.VIDEO,
-                    totalSizeText = "22.4 MB",
-                    totalSizeBytes = 23_488_102L,
+                    totalSizeText = videoSizeText,
+                    totalSizeBytes = videoBytes,
                     mimeType = "video/mp4",
                     supportsMultiThread = true,
                     qualityOptions = qualities,
@@ -111,7 +109,7 @@ object TelegramExtractor {
                     thumbnailUrl = thumbUrl
                 )
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // telegram inspection error
         }
         return@withContext null

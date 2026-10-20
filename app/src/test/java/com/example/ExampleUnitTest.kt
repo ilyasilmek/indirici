@@ -2,6 +2,7 @@ package com.example
 
 import com.example.data.model.FileType
 import com.example.engine.UrlInspector
+import com.example.engine.extractors.CourseExtractor
 import com.example.engine.extractors.InstagramExtractor
 import com.example.engine.extractors.TelegramExtractor
 import com.example.engine.extractors.TikTokExtractor
@@ -58,7 +59,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testTelegramAndSocialMatching() {
+    fun testTelegramSocialAndCourseMatching() {
         val tgUrl = "https://t.me/durov/248"
         assertTrue(TelegramExtractor.matches(tgUrl))
 
@@ -68,6 +69,13 @@ class ExampleUnitTest {
         val xUrl = "https://x.com/Android/status/1785000000000000000"
         assertTrue(TwitterExtractor.matches(xUrl))
         assertEquals("1785000000000000000", TwitterExtractor.extractTweetId(xUrl))
+
+        val udemyUrl = "https://www.udemy.com/course/kotlin-android-development/"
+        assertTrue(CourseExtractor.matches(udemyUrl))
+        assertEquals("Udemy Online Course", UrlInspector.detectPlatform(udemyUrl))
+
+        val skoolUrl = "https://www.skool.com/android-masters/classroom"
+        assertTrue(CourseExtractor.matches(skoolUrl))
     }
 
     @Test

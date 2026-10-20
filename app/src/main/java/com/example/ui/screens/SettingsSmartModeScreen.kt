@@ -3,7 +3,6 @@ package com.example.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,15 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneIphone
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
@@ -60,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.model.NetworkSettings
 import com.example.ui.theme.OmniCyan
 import com.example.ui.theme.OmniEmerald
 import com.example.ui.theme.OmniNeonTeal
@@ -150,7 +144,7 @@ fun SettingsSmartModeScreen(
                     if (settings.smartNetworkMode) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "✓ Mobil verideyken hız stabilizasyonu sağlar\n✓ Wi-Fi ağına bağlandığında otomatik turbo hıza geçer\n✓ Ağ kopmasında otomatik olarak kaldığı yerden devam eder",
+                            text = "✓ Mobil verideyken eşzamanlı parça sayısını 2x ile sınırlayarak hızı stabilize eder\n✓ Wi-Fi ağına bağlandığında otomatik turbo çoklu-parça hızına geçer\n✓ Ağ geçişlerinde indirmeleri otomatik olarak kaldığı yerden devam ettirir",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                             color = OmniNeonTeal
                         )
@@ -169,7 +163,7 @@ fun SettingsSmartModeScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "İndirme ve Ağ Yapılandırması",
+                        text = "İndirme, Ağ ve Depolama Yapılandırması",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -184,6 +178,30 @@ fun SettingsSmartModeScreen(
                         checked = settings.wifiOnly,
                         onCheckedChange = { viewModel.updateSettings(settings.copy(wifiOnly = it)) },
                         testTag = "wifi_only_switch"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto Resume on Wi-Fi Switch
+                    SettingSwitchRow(
+                        icon = Icons.Default.Sync,
+                        title = "Wi-Fi Bağlandığında Otomatik Devam Et",
+                        subtitle = "Ağ koptuğunda duraklatılan görevleri Wi-Fi gelince otomatik başlatır",
+                        checked = settings.autoResumeOnWifi,
+                        onCheckedChange = { viewModel.updateSettings(settings.copy(autoResumeOnWifi = it)) },
+                        testTag = "auto_resume_wifi_switch"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto Categorize Files Switch
+                    SettingSwitchRow(
+                        icon = Icons.Default.FolderSpecial,
+                        title = "Dosyaları Türüne Göre Klasörle",
+                        subtitle = "Downloads/OmniGet altında Video, Audio, Courses klasörlerine ayırır",
+                        checked = settings.autoCategorizeFiles,
+                        onCheckedChange = { viewModel.updateSettings(settings.copy(autoCategorizeFiles = it)) },
+                        testTag = "auto_categorize_switch"
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -341,7 +359,7 @@ fun SettingsSmartModeScreen(
                     SettingSwitchRow(
                         icon = Icons.Default.VolumeUp,
                         title = "Tamamlanma Bildirim Sesi",
-                        subtitle = "İndirme bittiğinde sesli uyarı ver",
+                        subtitle = "İndirme bittiğinde sesli uyarı ver (kapatıldığında sessiz bildirim gösterilir)",
                         checked = settings.notificationSound,
                         onCheckedChange = { viewModel.updateSettings(settings.copy(notificationSound = it)) },
                         testTag = "sound_switch"

@@ -9,7 +9,6 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
-import com.example.R
 import com.example.data.local.DownloadEntity
 import java.util.Locale
 
@@ -17,6 +16,7 @@ object NotificationHelper {
 
     const val CHANNEL_DOWNLOADING = "omniget_download_channel"
     const val CHANNEL_COMPLETED = "omniget_completed_channel"
+    const val CHANNEL_COMPLETED_SILENT = "omniget_completed_silent_channel"
     const val NOTIFICATION_ID_FOREGROUND = 1001
 
     fun createNotificationChannels(context: Context) {
@@ -35,7 +35,7 @@ object NotificationHelper {
 
             val completedChannel = NotificationChannel(
                 CHANNEL_COMPLETED,
-                "Tamamlanan İndirmeler (Completed)",
+                "Tamamlanan İndirmeler (Sesli & Titreşimli)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "İndirme tamamlandığında veya hata oluştuğunda gelen bildirimler"
@@ -43,8 +43,20 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
+            val completedSilentChannel = NotificationChannel(
+                CHANNEL_COMPLETED_SILENT,
+                "Tamamlanan İndirmeler (Sessiz)",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Ses ve titreşim kapalıyken gönderilen sessiz tamamlanma bildirimleri"
+                enableVibration(false)
+                setSound(null, null)
+                setShowBadge(true)
+            }
+
             notificationManager.createNotificationChannel(downloadChannel)
             notificationManager.createNotificationChannel(completedChannel)
+            notificationManager.createNotificationChannel(completedSilentChannel)
         }
     }
 
@@ -57,6 +69,7 @@ object NotificationHelper {
     ): Notification {
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("OPEN_TAB", "active")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -90,7 +103,12 @@ object NotificationHelper {
             .build()
     }
 
-    fun showDownloadCompletedNotification(context: Context, item: DownloadEntity) {
+    fun showDownloadCompletedNotification(
+        context: Context,
+        item: DownloadEntity,
+        playSound: Boolean = true,
+        vibrate: Boolean = true
+    ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
@@ -107,17 +125,24 @@ object NotificationHelper {
         )
 
         val sizeFormatted = formatFileSize(item.totalBytes)
+        val isSilent = !playSound && !vibrate
+        val channelId = if (isSilent) CHANNEL_COMPLETED_SILENT else CHANNEL_COMPLETED
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_COMPLETED)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setContentTitle("İndirme Tamamlandı: ${item.fileName}")
-            .setContentText("Boyut: $sizeFormatted • Dosya kaydedildi")
+            .setContentText("Boyut: $sizeFormatted • Kütüphanede görüntülemek için dokunun")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
+            .setSilent(isSilent)
+            .setPriority(if (isSilent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
 
-        notificationManager.notify(item.id.toInt() + 2000, notification)
+        var defaults = 0
+        if (playSound) defaults = defaults or NotificationCompat.DEFAULT_SOUND
+        if (vibrate) defaults = defaults or NotificationCompat.DEFAULT_VIBRATE
+        builder.setDefaults(defaults)
+
+        notificationManager.notify(item.id.toInt() + 2000, builder.build())
     }
 
     fun showDownloadFailedNotification(context: Context, item: DownloadEntity, reason: String) {
@@ -125,6 +150,7 @@ object NotificationHelper {
 
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("OPEN_TAB", "active")
         }
 
         val pendingIntent = PendingIntent.getActivity(

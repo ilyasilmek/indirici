@@ -92,11 +92,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIncomingIntent(intent)
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
+
+        val openTab = intent.getStringExtra("OPEN_TAB")
+        if (!openTab.isNullOrBlank()) {
+            viewModel.onNotificationTabRequested(openTab)
+        }
 
         if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -122,10 +128,10 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
 
     val snackMessage by viewModel.snackMessage.collectAsStateWithLifecycle()
     val activeDownloads by viewModel.activeDownloads.collectAsStateWithLifecycle()
-    val allDownloads by viewModel.allDownloads.collectAsStateWithLifecycle()
     val totalSpeed by viewModel.totalSpeedFormatted.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val navigateToDownloaderEvent by viewModel.navigateToDownloaderEvent.collectAsStateWithLifecycle()
+    val requestedTabEvent by viewModel.requestedTabEvent.collectAsStateWithLifecycle()
 
     val isWifi = viewModel.isWifiActive()
 
@@ -139,6 +145,27 @@ fun OmniGetMainApp(viewModel: OmniGetViewModel) {
     LaunchedEffect(navigateToDownloaderEvent) {
         if (navigateToDownloaderEvent > 0) {
             currentTab = NavigationTab.DOWNLOADER
+        }
+    }
+
+    LaunchedEffect(requestedTabEvent) {
+        when (requestedTabEvent) {
+            "library" -> {
+                currentTab = NavigationTab.LIBRARY
+                viewModel.clearRequestedTabEvent()
+            }
+            "active" -> {
+                currentTab = NavigationTab.ACTIVE
+                viewModel.clearRequestedTabEvent()
+            }
+            "settings" -> {
+                currentTab = NavigationTab.SETTINGS
+                viewModel.clearRequestedTabEvent()
+            }
+            "downloader" -> {
+                currentTab = NavigationTab.DOWNLOADER
+                viewModel.clearRequestedTabEvent()
+            }
         }
     }
 
