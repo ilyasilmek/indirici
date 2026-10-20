@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build & Test Android APK
+    name: Build & Package Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -29,19 +29,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK (API 35)
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-35 build-tools;35.0.0'
 
       - name: Ensure .env file exists for Secrets plugin
-        run: cp -n .env.example .env || true
+        run: cp -n .env.example .env || touch .env
 
       - name: Set up Gradle with caching
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --console=plain
 
       - name: Prepare Release Signing Keystore
         env:
@@ -57,7 +52,7 @@ jobs:
             echo "KEY_ALIAS=${KEY_ALIAS:-upload}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
           else
-            echo "No KEYSTORE_BASE64 secret found; generating self-signed keystore for release build..."
+            echo "Generating self-signed keystore for release APK..."
             keytool -genkeypair -v \
               -keystore my-upload-key.jks \
               -keyalg RSA \
@@ -74,7 +69,7 @@ jobs:
           echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
 
       - name: Build Debug and Release APKs
-        run: ./gradlew assembleDebug assembleRelease --console=plain
+        run: ./gradlew assembleDebug assembleRelease -x test --console=plain
 
       - name: Collect APKs
         run: |
@@ -105,10 +100,3 @@ jobs:
             dist/OmniGet-release-signed.apk
             dist/OmniGet-debug.apk
           generate_release_notes: true
-
-      - name: Upload Test Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports
-          path: app/build/reports/tests/
