@@ -56,6 +56,12 @@ class ExampleUnitTest {
         val shortsUrl = "https://www.youtube.com/shorts/dQw4w9WgXcQ"
         assertTrue(YouTubeExtractor.matches(shortsUrl))
         assertEquals("dQw4w9WgXcQ", YouTubeExtractor.extractVideoId(shortsUrl))
+
+        assertEquals("dQw4w9WgXcQ", YouTubeExtractor.extractVideoId("https://youtube.com/live/dQw4w9WgXcQ"))
+        assertEquals("dQw4w9WgXcQ", YouTubeExtractor.extractVideoId("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"))
+        assertEquals("dQw4w9WgXcQ", YouTubeExtractor.extractVideoId("https://music.youtube.com/watch?v=dQw4w9WgXcQ"))
+        assertTrue(!YouTubeExtractor.matches("https://youtube.com.example.org/watch?v=dQw4w9WgXcQ"))
+        assertEquals(null, YouTubeExtractor.extractVideoId("https://www.youtube.com/watch?v=not-a-video-id"))
     }
 
     @Test
