@@ -31,6 +31,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Ensure .env file exists for Secrets plugin
         run: cp -n .env.example .env || touch .env
@@ -39,6 +41,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Prepare Release Signing Keystore
+        id: release_signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -46,30 +49,26 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Decoding release keystore from GitHub Secrets..."
+            : "${STORE_PASSWORD:?STORE_PASSWORD secret is required}"
+            : "${KEY_PASSWORD:?KEY_PASSWORD secret is required}"
+            echo "Using release keystore from GitHub Secrets..."
             echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
             echo "STORE_PASSWORD=${STORE_PASSWORD}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${KEY_ALIAS:-upload}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
+            echo "configured=true" >> $GITHUB_OUTPUT
           else
-            echo "Generating self-signed keystore for release APK..."
-            keytool -genkeypair -v \
-              -keystore my-upload-key.jks \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -alias upload \
-              -storepass omniget123 \
-              -keypass omniget123 \
-              -dname "CN=OmniGet, OU=Mobile, O=OmniGet, L=Istanbul, S=Istanbul, C=TR"
-            echo "STORE_PASSWORD=omniget123" >> $GITHUB_ENV
-            echo "KEY_ALIAS=upload" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=omniget123" >> $GITHUB_ENV
+            echo "Release signing secrets are not configured; skipping release build."
+            echo "configured=false" >> $GITHUB_OUTPUT
           fi
           echo "KEYSTORE_PATH=${GITHUB_WORKSPACE}/my-upload-key.jks" >> $GITHUB_ENV
 
-      - name: Build Debug and Release APKs
-        run: ./gradlew assembleDebug assembleRelease -x test --console=plain
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug -x test --console=plain
+
+      - name: Build Signed Release APK
+        if: steps.release_signing.outputs.configured == 'true'
+        run: ./gradlew assembleRelease -x test --console=plain
 
       - name: Collect APKs
         run: |
@@ -86,6 +85,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Release APK Artifact
+        if: steps.release_signing.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: app-release-signed-apk
@@ -93,7 +93,7 @@ jobs:
           retention-days: 30
 
       - name: Publish to GitHub Releases (on Tag Push)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.release_signing.outputs.configured == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |

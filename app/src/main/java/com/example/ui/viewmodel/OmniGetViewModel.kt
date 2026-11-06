@@ -214,11 +214,6 @@ class OmniGetViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun startQuickPresetDownload(preset: MediaInspectResult) {
-        val option = preset.qualityOptions.firstOrNull() ?: return
-        startDownloadWithQuality(preset, option)
-    }
-
     fun pauseDownload(id: Long) {
         downloadManager.pauseDownload(id)
         _snackMessage.value = "İndirme duraklatıldı"

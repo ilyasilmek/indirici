@@ -6,6 +6,7 @@ import com.example.data.model.MediaQualityOption
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,26 +41,24 @@ object YouTubeExtractor {
     )
 
     fun matches(url: String): Boolean {
-        val lower = url.lowercase()
-        return lower.contains("youtube.com") || lower.contains("youtu.be")
+        val host = url.trim().toHttpUrlOrNull()?.host?.lowercase() ?: return false
+        return host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")
     }
 
     fun extractVideoId(url: String): String? {
-        val clean = url.trim()
-        val regexes = listOf(
-            Regex("""(?:youtube\.com/(?:watch\?.*v=|shorts/|embed/|v/)|youtu\.be/)([a-zA-Z0-9_-]{11})"""),
-            Regex("""[?&]v=([a-zA-Z0-9_-]{11})"""),
-            Regex("""youtu\.be/([a-zA-Z0-9_-]{11})"""),
-            Regex("""shorts/([a-zA-Z0-9_-]{11})""")
-        )
+        val parsedUrl = url.trim().toHttpUrlOrNull() ?: return null
+        if (!matches(parsedUrl.toString())) return null
 
-        for (regex in regexes) {
-            val match = regex.find(clean)
-            if (match != null && match.groupValues.size > 1) {
-                return match.groupValues[1]
+        val videoId = parsedUrl.queryParameter("v")
+            ?: parsedUrl.pathSegments.let { segments ->
+                when {
+                    parsedUrl.host == "youtu.be" -> segments.firstOrNull()
+                    segments.size >= 2 && segments[0] in setOf("shorts", "embed", "v", "live") -> segments[1]
+                    else -> null
+                }
             }
-        }
-        return null
+        return videoId?.takeIf { it.matches(Regex("[a-zA-Z0-9_-]{11}")) }
     }
 
     suspend fun extract(
