@@ -996,7 +996,7 @@ class DownloadManager(
             if (headerBytes.isNotEmpty()) {
                 FileInputStream(file).use { it.read(headerBytes) }
                 val headerStr = String(headerBytes, Charsets.UTF_8).lowercase()
-                if (headerStr.contains("<!doctype") || headerStr.contains("<html") || headerStr.contains("{"error"")) {
+                if (headerStr.contains("<!doctype") || headerStr.contains("<html") || headerStr.contains("{\"error\"")) {
                     file.delete()
                     return null
                 }
