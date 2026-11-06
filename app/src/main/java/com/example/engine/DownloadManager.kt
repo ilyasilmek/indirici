@@ -413,8 +413,7 @@ class DownloadManager(
                 }
                 if (resp.isSuccessful) {
                     val len = resp.header("Content-Length")?.toLongOrNull() ?: fallbackTotalBytes
-                    val acceptRanges = resp.header("Accept-Ranges")?.equals("bytes", ignoreCase = true) == true
-                    return TransferProbe(len, supportsRanges = acceptRanges && len > 0, isHls = false)
+                    return TransferProbe(len, supportsRanges = false, isHls = false)
                 }
             }
         } catch (_: Exception) {

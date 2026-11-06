@@ -1,8 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,20 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -70,7 +63,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.data.model.MediaInspectResult
 import com.example.data.model.MediaQualityOption
-import com.example.engine.UrlInspector
 import com.example.ui.components.FileTypeBadge
 import com.example.ui.theme.OmniCyan
 import com.example.ui.theme.OmniEmerald
@@ -359,51 +351,6 @@ fun DownloaderScreen(
             }
         }
 
-        // Quick Presets and Sample Downloads Header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = "Presets",
-                        tint = OmniCyan,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Hızlı Test ve Örnek Medyalar",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Text(
-                    text = "Tek Tıkla İndir",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Preset Items
-        items(UrlInspector.PRESET_MEDIA_ITEMS) { preset ->
-            PresetDownloadCard(
-                preset = preset,
-                onSelectPreset = {
-                    viewModel.startQuickPresetDownload(preset)
-                    onNavigateToActive()
-                },
-                onInspectPreset = {
-                    viewModel.onUrlInputChanged(preset.originalUrl)
-                    viewModel.inspectUrl(preset.originalUrl)
-                }
-            )
-        }
-
         item {
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -602,88 +549,6 @@ fun InspectResultCard(
                 Icon(imageVector = Icons.Default.Download, contentDescription = "İndir", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Hemen İndirmeye Başla", fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-fun PresetDownloadCard(
-    preset: MediaInspectResult,
-    onSelectPreset: () -> Unit,
-    onInspectPreset: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-        modifier = Modifier.fillMaxWidth().testTag("preset_card_${preset.fileType.name}")
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (!preset.thumbnailUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = preset.thumbnailUrl,
-                    contentDescription = preset.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FileTypeBadge(preset.fileType)
-                    Text(
-                        text = preset.totalSizeText,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = OmniEmerald
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = preset.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
-
-                Text(
-                    text = preset.hostPlatform,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Quick One-Tap Download Button
-            IconButton(
-                onClick = onSelectPreset,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(OmniViolet.copy(alpha = 0.15f))
-                    .testTag("preset_quick_download_${preset.fileType.name}")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = "Hızlı İndir",
-                    tint = OmniViolet,
-                    modifier = Modifier.size(20.dp)
-                )
             }
         }
     }
