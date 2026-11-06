@@ -31,6 +31,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Ensure .env file exists for Secrets plugin
         run: cp -n .env.example .env || touch .env
