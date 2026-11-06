@@ -463,6 +463,7 @@ class DownloadManager(
                         partsMetaFile = partsMetaFile,
                         totalBytes = resolvedTotalBytes,
                         threadsCount = effectiveThreads,
+                        fileType = item.fileType,
                         settings = settings
                     )
                 else ->
@@ -574,6 +575,7 @@ class DownloadManager(
         partsMetaFile: File,
         totalBytes: Long,
         threadsCount: Int,
+        fileType: FileType,
         settings: NetworkSettings
     ): Boolean = coroutineScope {
         val segmentProgress = AtomicLongArray(threadsCount)
@@ -639,23 +641,17 @@ class DownloadManager(
                 ).build()
 
                 httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful && response.code != 206) {
+                    if (response.code != 206) {
                         throw IllegalStateException("Segment $threadIndex HTTP ${response.code}")
                     }
                     val contentType = response.header("Content-Type")?.lowercase() ?: ""
-            if (item.fileType in listOf(FileType.VIDEO, FileType.AUDIO, FileType.ARCHIVE) &&
-                (contentType.startsWith("text/html") || contentType.startsWith("text/plain") ||
-                 (contentType.startsWith("application/json") && !url.contains(".json")))) {
-                val reason = "İçerik korumalı veya sunucu web sayfası döndürdü (Video akışı doğrulanamadı)"
-                repository.markFailed(downloadId, reason)
-                val itm = repository.getDownloadById(downloadId)
-                if (itm != null) {
-                    NotificationHelper.showDownloadFailedNotification(context, itm.copy(status = DownloadStatus.FAILED), reason)
-                }
-                return false
-            }
+                    if (fileType in listOf(FileType.VIDEO, FileType.AUDIO, FileType.ARCHIVE) &&
+                        (contentType.startsWith("text/html") || contentType.startsWith("text/plain") ||
+                            (contentType.startsWith("application/json") && !url.contains(".json")))) {
+                        throw IllegalStateException("Sunucu indirilebilir medya yerine web sayfası döndürdü")
+                    }
 
-            val body = response.body ?: throw IllegalStateException("Segment $threadIndex boş yanıt")
+                    val body = response.body ?: throw IllegalStateException("Segment $threadIndex boş yanıt")
 
                     RandomAccessFile(tempFile, "rw").use { raf ->
                         raf.seek(currentStart)

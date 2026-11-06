@@ -57,7 +57,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "omniget_database.db"
                 )
                     .addMigrations(MIGRATION_1_2)
-                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance

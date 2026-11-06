@@ -25,13 +25,18 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      val ksFile = file(keystorePath)
-      if (ksFile.exists()) {
-        storeFile = ksFile
-        storePassword = System.getenv("STORE_PASSWORD") ?: "omniget123"
-        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-        keyPassword = System.getenv("KEY_PASSWORD") ?: "omniget123"
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+      val storePassword = System.getenv("STORE_PASSWORD")
+      val keyAlias = System.getenv("KEY_ALIAS")
+      val keyPassword = System.getenv("KEY_PASSWORD")
+      if (keystorePath != null && storePassword != null && keyAlias != null && keyPassword != null) {
+        val ksFile = file(keystorePath)
+        if (ksFile.exists()) {
+          storeFile = ksFile
+          this.storePassword = storePassword
+          this.keyAlias = keyAlias
+          this.keyPassword = keyPassword
+        }
       }
     }
   }
@@ -43,11 +48,7 @@ android {
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       val releaseSigning = signingConfigs.getByName("release")
-      signingConfig = if (releaseSigning.storeFile?.exists() == true) {
-        releaseSigning
-      } else {
-        signingConfigs.getByName("debug")
-      }
+      signingConfig = releaseSigning.takeIf { it.storeFile?.exists() == true }
     }
   }
   compileOptions {
